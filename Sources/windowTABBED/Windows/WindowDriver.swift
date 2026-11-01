@@ -77,6 +77,9 @@ struct ExternalWindow: Hashable, CustomStringConvertible {
     func raise() {
         AXUIElementPerformAction(element, kAXRaiseAction as CFString)
         AXUIElementSetAttributeValue(element, kAXMainAttribute as CFString, kCFBooleanTrue)
+        // Since macOS 14 a background app's activate() request can be ignored, e.g. after a click
+        // on our non-activating tab bar. Setting the app frontmost through Accessibility still works.
+        AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), kAXFrontmostAttribute as CFString, kCFBooleanTrue)
         app?.activate()
     }
 
@@ -141,6 +144,11 @@ enum WindowDriver {
             .filter { $0.activationPolicy == .regular && $0.processIdentifier != ownPID }
             .flatMap { windows(of: $0.processIdentifier) }
             .filter { !floating.contains($0.windowID) }
+    }
+
+    /// Every window the window server knows about, on screen or not (minimized, other Spaces).
+    static func existingWindowIDs() -> Set<CGWindowID> {
+        Set(windowInfo(onScreenOnly: false).map(\.id))
     }
 
     /// IDs of on-screen, normal-layer windows, front to back.

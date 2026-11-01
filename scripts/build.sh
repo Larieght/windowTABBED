@@ -1,7 +1,9 @@
 #!/bin/bash
 # Builds build/windowTABBED.app and signs it.
 #
-# Usage: scripts/build.sh [debug|release] [--open]
+# Usage: scripts/build.sh [debug|release] [--open] [--install]
+#   --open     relaunch the app after building
+#   --install  copy it to /Applications and run that copy (implies --open)
 #
 # Signing: macOS remembers the Accessibility permission by the app's signature.
 # An ad-hoc signature changes on every build, so you would have to re-allow it each time.
@@ -14,10 +16,12 @@ cd "$(dirname "$0")/.."
 
 CONFIG="debug"
 OPEN=0
+INSTALL=0
 for arg in "$@"; do
     case "$arg" in
         debug|release) CONFIG="$arg" ;;
         --open) OPEN=1 ;;
+        --install) INSTALL=1; OPEN=1 ;;
         *) echo "Unknown argument: $arg" >&2; exit 1 ;;
     esac
 done
@@ -44,5 +48,11 @@ echo "Built $APP"
 
 if [ "$OPEN" = 1 ]; then
     pkill -x windowTABBED 2>/dev/null || true
+    if [ "$INSTALL" = 1 ]; then
+        rm -rf "/Applications/windowTABBED.app"
+        cp -R "$APP" "/Applications/windowTABBED.app"
+        APP="/Applications/windowTABBED.app"
+        echo "Installed $APP"
+    fi
     open "$APP"
 fi
