@@ -14,6 +14,9 @@ repo and code all say windowTABBED.
 - It signs with the self-signed `windowTABBED Dev` certificate in the login keychain, which keeps the
   Accessibility permission across rebuilds. If the permission is suddenly gone, check that the
   certificate still exists before asking the user to re-allow it.
+- `build.sh` links with `-platform_version macos 14.0 <SDK>`. Plain `swift build` records the
+  deployment target (14.0) as the SDK, and macOS then shows the app in the pre-26 compatibility
+  look: old title bar and traffic lights, and glass controls drawn as their older fallback.
 - No `@State` and other macro-based SwiftUI: the macro plugin ships only with Xcode. Use
   `@GestureState`, or an `ObservableObject` held outside the view.
 - Reinstalling kills the running app without `applicationWillTerminate`, so parked tabs stay

@@ -26,8 +26,13 @@ for arg in "$@"; do
     esac
 done
 
-swift build -c "$CONFIG"
-BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
+# SwiftPM records the deployment target (macOS 14) as the SDK the app was built with. macOS keeps
+# the pre-26 look (old title bar and traffic lights) for apps built with an older SDK, so record
+# the SDK we actually build with.
+SDK_VERSION="$(xcrun --show-sdk-version)"
+LINK_FLAGS=(-Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION")
+swift build -c "$CONFIG" "${LINK_FLAGS[@]}"
+BIN_DIR="$(swift build -c "$CONFIG" "${LINK_FLAGS[@]}" --show-bin-path)"
 
 APP="build/windowTABBED.app"
 rm -rf "$APP"
