@@ -83,6 +83,11 @@ struct ExternalWindow: Hashable, CustomStringConvertible {
         app?.activate()
     }
 
+    /// Moves the window up the stack without switching apps or touching the app's other windows.
+    func raiseInPlace() {
+        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+    }
+
     func setMinimized(_ minimized: Bool) {
         AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, minimized as CFBoolean)
     }
@@ -156,9 +161,40 @@ enum WindowDriver {
         windowInfo(onScreenOnly: true).filter(\.isNormalLayer).map(\.id)
     }
 
+    /// The topmost normal window of another app under `point` (AX coordinates), skipping `excluded`.
+    /// Uses the window server first, which is cheap, and only then asks that one app via Accessibility.
+    static func window(at point: CGPoint, excluding excluded: Set<CGWindowID> = []) -> ExternalWindow? {
+        serverWindow(at: point, excluding: excluded).flatMap(window(for:))
+    }
+
+    /// What the window server knows about a window. Cheap to get, unlike Accessibility.
+    struct ServerWindow {
+        let id: CGWindowID
+        let pid: pid_t
+        let frame: CGRect
+    }
+
+    static func serverWindow(at point: CGPoint, excluding excluded: Set<CGWindowID> = []) -> ServerWindow? {
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        return windowInfo(onScreenOnly: true)
+            .first { $0.isNormalLayer && $0.pid != ownPID && !excluded.contains($0.id) && $0.bounds.contains(point) }
+            .map { ServerWindow(id: $0.id, pid: $0.pid, frame: $0.bounds) }
+    }
+
+    static func window(for server: ServerWindow) -> ExternalWindow? {
+        windows(of: server.pid).first { $0.windowID == server.id }
+    }
+
+    /// Frame of a window straight from the window server, without asking its app.
+    static func serverFrame(of id: CGWindowID) -> CGRect? {
+        windowInfo(onScreenOnly: true).first { $0.id == id }?.bounds
+    }
+
     private struct WindowInfo {
         let id: CGWindowID
         let layer: Int
+        let pid: pid_t
+        let bounds: CGRect
         var isNormalLayer: Bool { layer == 0 }
     }
 
@@ -167,9 +203,12 @@ enum WindowDriver {
         let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
         return list.compactMap { entry in
             guard let id = entry[kCGWindowNumber as String] as? CGWindowID,
-                  let layer = entry[kCGWindowLayer as String] as? Int
+                  let layer = entry[kCGWindowLayer as String] as? Int,
+                  let pid = entry[kCGWindowOwnerPID as String] as? pid_t
             else { return nil }
-            return WindowInfo(id: id, layer: layer)
+            let bounds = (entry[kCGWindowBounds as String] as? NSDictionary)
+                .flatMap { CGRect(dictionaryRepresentation: $0 as CFDictionary) } ?? .zero
+            return WindowInfo(id: id, layer: layer, pid: pid, bounds: bounds)
         }
     }
 }

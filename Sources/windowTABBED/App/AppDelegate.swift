@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let permissions = Permissions()
     private var groups: GroupManager?
+    private var dragWatcher: DragWatcher?
     #if DEBUG
     private var debugHooks: DebugHooks?
     #endif
@@ -36,6 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log.notice("Accessibility access granted")
         let groups = GroupManager()
         self.groups = groups
+        dragWatcher = DragWatcher(groups: groups)
+        if Settings.shared.groupingKey == nil {
+            SettingsWindow.shared.show(welcome: true)
+        }
         #if DEBUG
         debugHooks = DebugHooks(groups: groups)
         #endif
@@ -51,11 +56,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         if let groups {
-            // Temporary until Shift + drag grouping (step 4).
-            let group = NSMenuItem(title: "Group with Window Behind", action: #selector(groupWithWindowBehind), keyEquivalent: "")
-            group.target = self
-            menu.addItem(group)
-
             let ungroup = NSMenuItem(title: "Ungroup All", action: groups.groups.isEmpty ? nil : #selector(ungroupAll), keyEquivalent: "")
             ungroup.target = self
             menu.addItem(ungroup)
@@ -69,6 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         menu.addItem(withTitle: "Quit windowTABBED", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
@@ -82,20 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Permissions.openSettings()
     }
 
-    /// Groups the window you're in with the window right behind it (or adds it to that window's group).
-    @objc private func groupWithWindowBehind() {
-        guard let groups, let front = WindowDriver.focusedWindow() else {
-            return log.notice("Group: no focused window")
-        }
-        let ownGroup = groups.group(containing: front.windowID)
-        let candidates = WindowDriver.allWindows().filter { $0 != front && !(ownGroup?.contains($0.windowID) ?? false) }        // Window-server order is front to back, so the first match is the window just behind.
-        guard let behind = WindowDriver.normalWindowOrder().lazy
-            .compactMap({ id in candidates.first { $0.windowID == id } })
-            .first
-        else {
-            return log.notice("Group: no window behind \(front.description, privacy: .public)")
-        }
-        groups.add(front, to: behind)
+    @objc private func openSettings() {
+        SettingsWindow.shared.show()
     }
 
     @objc private func ungroupAll() {

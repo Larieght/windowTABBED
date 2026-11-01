@@ -15,6 +15,12 @@ enum ScreenGeometry {
         CGRect(x: rect.minX, y: mainHeight - rect.maxY, width: rect.width, height: rect.height)
     }
 
+    /// The mouse pointer, in AX coordinates.
+    static var mouseLocation: CGPoint {
+        let point = NSEvent.mouseLocation
+        return CGPoint(x: point.x, y: mainHeight - point.y)
+    }
+
     /// The usable area (without menu bar and Dock) of the display that holds most of `rect`, in AX coordinates.
     static func visibleFrame(containing rect: CGRect) -> CGRect {
         let appKit = appKitRect(fromAX: rect)

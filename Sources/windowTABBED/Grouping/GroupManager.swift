@@ -20,6 +20,8 @@ final class WindowGroup {
 final class GroupManager {
     private(set) var groups: [WindowGroup] = []
     private let watcher = WindowWatcher()
+    /// A window being carried with the grouping key held: its group doesn't follow it.
+    private var syncPausedID: CGWindowID?
 
     /// Offset for a window that leaves its group with ×, so it doesn't vanish behind the group.
     private static let detachOffset: CGFloat = 30
@@ -63,6 +65,14 @@ final class GroupManager {
                 guard let self, let group else { return }
                 self.remove(id, from: group, detach: true)
             }
+            group.bar.model.onMove = { [weak self, weak group] id, index in
+                guard let self, let group else { return }
+                self.move(id, to: index, in: group)
+            }
+            group.bar.model.onDragOut = { [weak self, weak group] id in
+                guard let self, let group else { return }
+                self.dragOut(id, from: group, to: ScreenGeometry.mouseLocation)
+            }
             groups.append(group)
             watcher.watch(target)
         }
@@ -83,7 +93,30 @@ final class GroupManager {
         refreshBar(of: group)
         // The other app raises its window asynchronously; order the bar again once it has.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.fixStacking()
             self?.positionBar(of: group)
+        }
+    }
+
+    /// Bringing an app to the front pulls ALL its windows forward, including ones sitting
+    /// behind another group's active tab. Put each group's active window back on top of its
+    /// own background tabs, then return the window you're actually using to the very top.
+    private func fixStacking() {
+        let order = WindowDriver.normalWindowOrder()
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        var restacked = false
+        for group in groups {
+            guard let active = group.active, let activeRank = rank[active.windowID] else { continue }
+            let buried = group.windows.contains { $0.windowID != active.windowID && (rank[$0.windowID] ?? .max) < activeRank }
+            if buried {
+                active.raiseInPlace()
+                positionBar(of: group)
+                restacked = true
+            }
+        }
+        if restacked {
+            WindowDriver.focusedWindow()?.raiseInPlace()
+            log.notice("Restacked groups after an app came forward")
         }
     }
 
@@ -104,8 +137,45 @@ final class GroupManager {
 
         if detach, let frame = removed.frame {
             removed.setFrame(frame.offsetBy(dx: Self.detachOffset, dy: Self.detachOffset))
-            removed.raise()
+            raiseOnTop(removed)
         }
+    }
+
+    /// Raises a window that just left a group, then repairs whatever its app dragged forward with it.
+    private func raiseOnTop(_ window: ExternalWindow) {
+        window.raise()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.fixStacking()
+        }
+    }
+
+    /// Reorders tabs.
+    func move(_ id: CGWindowID, to index: Int, in group: WindowGroup) {
+        guard let from = group.windows.firstIndex(where: { $0.windowID == id }) else { return }
+        let window = group.windows.remove(at: from)
+        group.windows.insert(window, at: min(max(index, 0), group.windows.count))
+        refreshBar(of: group)
+    }
+
+    /// A tab dragged out of the bar: the window leaves the group and lands at `point`,
+    /// with the pointer on its title bar as if you'd been carrying it there.
+    func dragOut(_ id: CGWindowID, from group: WindowGroup, to point: CGPoint) {
+        guard let window = group.windows.first(where: { $0.windowID == id }) else { return }
+        remove(id, from: group, detach: false)
+        window.setPosition(CGPoint(x: point.x - 60, y: point.y - 12))
+        raiseOnTop(window)
+    }
+
+    /// While a window is carried with the grouping key held, its group stays put.
+    func pauseSync(for id: CGWindowID) {
+        syncPausedID = id
+    }
+
+    /// Drop ended. If the window is still the active tab somewhere, its group catches up with it.
+    func resumeSync() {
+        guard let id = syncPausedID else { return }
+        syncPausedID = nil
+        handle(.frameChanged(id))
     }
 
     /// Ends a group. Its windows stay where they are as normal windows.
@@ -155,7 +225,8 @@ final class GroupManager {
         case .frameChanged(let id):
             // Only the active window leads. The others move because we move them,
             // and their own move notifications land here too and are ignored.
-            guard let group = group(containing: id), group.activeID == id,
+            guard id != syncPausedID,
+                  let group = group(containing: id), group.activeID == id,
                   let frame = group.active?.frame
             else { return }
             for window in group.windows where window.windowID != id {
@@ -186,6 +257,8 @@ final class GroupManager {
                 group.activeID = focused.windowID
                 refreshBar(of: group)
             }
+            // Cmd-Tab and the Dock bring every window of an app forward, background tabs included.
+            fixStacking()
             // Any window may now cover a group, or a group window may be back on top:
             // keep every bar directly above its active window.
             groups.forEach(positionBar)

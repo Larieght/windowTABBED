@@ -16,12 +16,28 @@ struct TabStripView: View {
                     flipped: model.flipped,
                     width: model.tabWidth,
                     onSelect: { model.onSelect?(tab.id) },
-                    onClose: { model.onClose?(tab.id) }
+                    onClose: { model.onClose?(tab.id) },
+                    onDragEnd: { translation in dragEnded(tab.id, translation) }
                 )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.flipped ? .topLeading : .bottomLeading)
         .animation(Self.spring, value: model.activeID)
+        .animation(Self.spring, value: model.tabs.map(\.id))
+    }
+
+    /// Out of the bar (up or down) detaches the window; sideways reorders.
+    private func dragEnded(_ id: CGWindowID, _ translation: CGSize) {
+        if abs(translation.height) > TabChip.dragOutDistance {
+            model.onDragOut?(id)
+            return
+        }
+        guard let from = model.tabs.firstIndex(where: { $0.id == id }) else { return }
+        let step = model.tabWidth + TabBarPanel.tabSpacing
+        let to = from + Int((translation.width / step).rounded())
+        if to != from {
+            model.onMove?(id, to)
+        }
     }
 }
 
@@ -33,6 +49,14 @@ private struct TabChip: View {
     let width: CGFloat
     let onSelect: () -> Void
     let onClose: () -> Void
+    let onDragEnd: (CGSize) -> Void
+
+    /// How far up or down a tab has to be pulled to come out of the bar.
+    static let dragOutDistance: CGFloat = 24
+
+    // @GestureState rather than @State: it resets on release, and @State needs a compiler
+    // plugin that only ships with full Xcode, not the command-line tools.
+    @GestureState private var dragOffset: CGSize = .zero
 
     private static let activeHeight: CGFloat = 30
     private static let inactiveHeight: CGFloat = 26
@@ -70,7 +94,15 @@ private struct TabChip: View {
         .background(background)
         .clipShape(shape)
         .contentShape(shape)
+        // Follows the pointer sideways; fades once it's far enough up or down to come out.
+        .offset(x: dragOffset.width)
+        .opacity(abs(dragOffset.height) > Self.dragOutDistance ? 0.5 : 1)
+        .zIndex(dragOffset == .zero ? 0 : 1)
         .onTapGesture(perform: onSelect)
+        .gesture(
+            DragGesture(minimumDistance: 4)
+                .updating($dragOffset) { value, offset, _ in offset = value.translation }
+                .onEnded { onDragEnd($0.translation) })
     }
 
     private var shape: UnevenRoundedRectangle {

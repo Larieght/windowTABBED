@@ -18,6 +18,10 @@ final class TabBarModel: ObservableObject {
 
     var onSelect: ((CGWindowID) -> Void)?
     var onClose: ((CGWindowID) -> Void)?
+    /// Tab dragged sideways to a new position.
+    var onMove: ((CGWindowID, Int) -> Void)?
+    /// Tab dragged up or down out of the bar and let go.
+    var onDragOut: ((CGWindowID) -> Void)?
 }
 
 /// The tab strip window. One per group, owned by windowTABBED, ordered directly above the
