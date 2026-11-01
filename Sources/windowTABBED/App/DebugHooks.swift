@@ -36,12 +36,22 @@ final class DebugHooks {
             group.bar.model.onMove?(group.windows[n].windowID, Int(parts[2]) ?? n)
         case ("dragout", let n?, let group?) where group.windows.indices.contains(n):
             group.bar.model.onDragOut?(group.windows[n].windowID)
+        case ("setpos", let n?, let group?) where group.windows.indices.contains(n) && parts.count == 4:
+            let window = group.windows[n]
+            window.setPosition(CGPoint(x: Double(parts[2]) ?? 0, y: Double(parts[3]) ?? 0))
+            log.notice("debug: \(window.description, privacy: .public) now at \(String(describing: window.frame), privacy: .public)")
+        case ("release", _, _):
+            Self.releaseModifiers()
         case ("snapshot", _, _):
             snapshot()
         case ("keydrag", _, _) where parts.count == 5:
             let n = parts.dropFirst().compactMap { Double($0) }
-            guard n.count == 4 else { fallthrough }
+            guard n.count == 4 else { return }
             keyDrag(from: CGPoint(x: n[0], y: n[1]), to: CGPoint(x: n[2], y: n[3]))
+        case ("drag", _, let group?) where parts.count == 5:
+            let n = parts.dropFirst().compactMap { Double($0) }
+            guard n.count == 4 else { return }
+            drag(from: CGPoint(x: n[0], y: n[1]), to: CGPoint(x: n[2], y: n[3]), measuring: group)
         default:
             log.notice("debug: can't run \(command, privacy: .public)")
             return
@@ -88,6 +98,51 @@ final class DebugHooks {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.016 * Double(steps) + 0.3) {
             post(.leftMouseUp, end)
+            Self.releaseModifiers()
+        }
+    }
+
+    /// Events posted with a modifier flag leave it set system-wide, as if the key were still
+    /// held, until a key event says otherwise.
+    private static func releaseModifiers() {
+        let event = CGEvent(keyboardEventSource: nil, virtualKey: 63, keyDown: false)
+        event?.type = .flagsChanged
+        event?.flags = []
+        event?.post(tap: .cghidEventTap)
+    }
+
+    /// A plain drag (no grouping key) over ~1 s that logs how far the tab bar trails the active
+    /// window. Runs off the main thread so windowTABBED handles the drag as it would a real one,
+    /// and samples the window server halfway between mouse events.
+    private func drag(from start: CGPoint, to end: CGPoint, measuring group: WindowGroup) {
+        let windowID = group.activeID, barID = CGWindowID(group.bar.windowNumber)
+        func post(_ type: CGEventType, _ point: CGPoint) {
+            let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)
+            // Without this the events pick up modifier state left behind by keydrag.
+            event?.flags = []
+            event?.post(tap: .cghidEventTap)
+        }
+        func lag() -> CGFloat {
+            guard let active = WindowDriver.serverFrame(of: windowID), let bar = WindowDriver.serverFrame(of: barID)
+            else { return 0 }
+            return hypot(bar.minX - TabBarPanel.inset - active.minX, bar.maxY - active.minY)
+        }
+        DispatchQueue.global(qos: .userInteractive).async {
+            var samples: [CGFloat] = []
+            post(.leftMouseDown, start)
+            let steps = 60
+            for step in 1...steps {
+                usleep(8_000)
+                let t = CGFloat(step) / CGFloat(steps)
+                post(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t))
+                usleep(8_000)
+                if step > 5 { samples.append(lag()) }
+            }
+            usleep(100_000)
+            post(.leftMouseUp, end)
+            usleep(500_000)
+            let average = samples.reduce(0, +) / CGFloat(max(samples.count, 1))
+            log.notice("debug: bar lag avg \(Int(average), privacy: .public) pt, max \(Int(samples.max() ?? 0), privacy: .public) pt, after release \(Int(lag()), privacy: .public) pt")
         }
     }
 

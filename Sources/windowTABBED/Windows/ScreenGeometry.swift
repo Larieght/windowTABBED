@@ -23,14 +23,27 @@ enum ScreenGeometry {
 
     /// The usable area (without menu bar and Dock) of the display that holds most of `rect`, in AX coordinates.
     static func visibleFrame(containing rect: CGRect) -> CGRect {
+        guard let screen = screen(containing: rect) else { return rect }
+        return axRect(fromAppKit: screen.visibleFrame)
+    }
+
+    /// The whole display that holds most of `rect`, in AX coordinates.
+    static func screenFrame(containing rect: CGRect) -> CGRect {
+        guard let screen = screen(containing: rect) else { return rect }
+        return axRect(fromAppKit: screen.frame)
+    }
+
+    /// Every display, in AX coordinates.
+    static var screenFrames: [CGRect] {
+        NSScreen.screens.map { axRect(fromAppKit: $0.frame) }
+    }
+
+    private static func screen(containing rect: CGRect) -> NSScreen? {
         let appKit = appKitRect(fromAX: rect)
         let overlap = { (screen: NSScreen) -> CGFloat in
             let shared = screen.frame.intersection(appKit)
             return shared.isNull ? 0 : shared.width * shared.height
         }
-        guard let screen = NSScreen.screens.max(by: { overlap($0) < overlap($1) }) ?? NSScreen.main else {
-            return rect
-        }
-        return axRect(fromAppKit: screen.visibleFrame)
+        return NSScreen.screens.max(by: { overlap($0) < overlap($1) }) ?? NSScreen.main
     }
 }

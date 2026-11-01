@@ -1,9 +1,12 @@
 import AppKit
 
-/// Windows that share one tab bar. All of them sit at the same frame; the active one is on top.
+/// Windows that share one tab bar. The active one sits at the group's frame; the others are
+/// parked out of sight (see Parking) until you switch to them.
 final class WindowGroup {
     var windows: [ExternalWindow]
     var activeID: CGWindowID
+    /// Where the group is: the active window's frame, and where a tab goes when it becomes active.
+    var frame: CGRect
     let bar = TabBarPanel()
     /// The whole group was sent to the Dock together.
     var isMinimized = false
@@ -11,9 +14,10 @@ final class WindowGroup {
     var isFullScreen = false
     var isPaused: Bool { isMinimized || isFullScreen }
 
-    init(window: ExternalWindow) {
+    init(window: ExternalWindow, frame: CGRect) {
         windows = [window]
         activeID = window.windowID
+        self.frame = frame
     }
 
     var active: ExternalWindow? { windows.first { $0.windowID == activeID } }
@@ -37,6 +41,7 @@ final class GroupManager {
 
     init() {
         watcher.onEvent = { [weak self] event in self?.handle(event) }
+        recoverParkedWindows()
         // Safety net for apps that close windows without telling Accessibility (Finder).
         // Also for full screen, which doesn't always send a resize notification.
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -67,7 +72,8 @@ final class GroupManager {
         if let targetGroup {
             group = targetGroup
         } else {
-            group = WindowGroup(window: target)
+            guard let frame = target.frame else { return }
+            group = WindowGroup(window: target, frame: frame)
             group.bar.model.onSelect = { [weak self, weak group] id in
                 guard let self, let group else { return }
                 self.activate(id, in: group)
@@ -88,46 +94,46 @@ final class GroupManager {
             watcher.watch(target)
         }
 
-        guard let frame = group.active?.frame else { return }
-        window.setFrame(frame)
         group.windows.append(window)
         watcher.watch(window)
         activate(window.windowID, in: group)
         log.notice("Grouped \(window.description, privacy: .public) with \(target.description, privacy: .public); \(group.windows.count) tabs")
     }
 
-    /// Switches tabs: brings that window to the front. Its content shows instantly; only the tabs animate.
+    /// Switches tabs: moves that window into the group's frame and brings it to the front, then
+    /// parks the one it replaces. Its content shows instantly; only the tabs animate.
     func activate(_ id: CGWindowID, in group: WindowGroup) {
         guard let window = group.windows.first(where: { $0.windowID == id }) else { return }
+        let previous = group.active
         group.activeID = id
+        if previous?.windowID != id {
+            window.setFrame(group.frame)
+        }
         window.raise()
+        // Park the old tab only once the new one covers it, so nothing flashes in between.
+        if let previous, previous.windowID != id {
+            park(previous, in: group)
+        }
         refreshBar(of: group)
         // The other app raises its window asynchronously; order the bar again once it has.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            self?.fixStacking()
             self?.positionBar(of: group)
         }
     }
 
-    /// Bringing an app to the front pulls ALL its windows forward, including ones sitting
-    /// behind another group's active tab. Put each group's active window back on top of its
-    /// own background tabs, then return the window you're actually using to the very top.
-    private func fixStacking() {
-        let order = WindowDriver.normalWindowOrder()
-        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        var restacked = false
-        for group in groups {
-            guard let active = group.active, let activeRank = rank[active.windowID] else { continue }
-            let buried = group.windows.contains { $0.windowID != active.windowID && (rank[$0.windowID] ?? .max) < activeRank }
-            if buried {
-                active.raiseInPlace()
-                positionBar(of: group)
-                restacked = true
-            }
-        }
-        if restacked {
-            WindowDriver.focusedWindow()?.raiseInPlace()
-            log.notice("Restacked groups after an app came forward")
+    private func park(_ window: ExternalWindow, in group: WindowGroup) {
+        let size = window.frame?.size ?? group.frame.size
+        window.setPosition(Parking.origin(for: size, near: group.frame))
+    }
+
+    /// Puts back windows a previous run left parked (it crashed or was force-quit), in the
+    /// middle of their display.
+    private func recoverParkedWindows() {
+        for window in WindowDriver.allWindows() {
+            guard let frame = window.frame, Parking.isParked(frame) else { continue }
+            let visible = ScreenGeometry.visibleFrame(containing: frame)
+            window.setPosition(CGPoint(x: visible.midX - frame.width / 2, y: visible.midY - frame.height / 2))
+            log.notice("Brought back parked window \(window.description, privacy: .public)")
         }
     }
 
@@ -146,17 +152,10 @@ final class GroupManager {
             refreshBar(of: group)
         }
 
-        if detach, let frame = removed.frame {
-            removed.setFrame(frame.offsetBy(dx: Self.detachOffset, dy: Self.detachOffset))
-            raiseOnTop(removed)
-        }
-    }
-
-    /// Raises a window that just left a group, then repairs whatever its app dragged forward with it.
-    private func raiseOnTop(_ window: ExternalWindow) {
-        window.raise()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            self?.fixStacking()
+        if detach {
+            // It may be parked: bring it back next to the group.
+            removed.setFrame(group.frame.offsetBy(dx: Self.detachOffset, dy: Self.detachOffset))
+            removed.raise()
         }
     }
 
@@ -173,8 +172,19 @@ final class GroupManager {
     func dragOut(_ id: CGWindowID, from group: WindowGroup, to point: CGPoint) {
         guard let window = group.windows.first(where: { $0.windowID == id }) else { return }
         remove(id, from: group, detach: false)
-        window.setPosition(CGPoint(x: point.x - 60, y: point.y - 12))
-        raiseOnTop(window)
+        // A parked tab may still have an old size: give it the group's.
+        window.setFrame(CGRect(origin: CGPoint(x: point.x - 60, y: point.y - 12), size: group.frame.size))
+        window.raise()
+    }
+
+    /// Called on every mouse drag event. Move notifications from the window's app arrive a few
+    /// frames late, so while you drag a group's window its bar follows the window server's
+    /// position instead, which is where the window really is right now.
+    func followDrag(of id: CGWindowID) {
+        guard let group = group(containing: id), group.activeID == id, !group.isPaused,
+              let frame = WindowDriver.serverFrame(of: id)
+        else { return }
+        group.bar.attach(above: id, frame: frame, placement: TabBarPanel.placement(for: frame) ?? .overlapping)
     }
 
     /// While a window is carried with the grouping key held, its group stays put.
@@ -189,10 +199,14 @@ final class GroupManager {
         handle(.frameChanged(id))
     }
 
-    /// Ends a group. Its windows stay where they are as normal windows.
+    /// Ends a group. Its parked tabs come back to the group's frame, behind the active one,
+    /// and they all carry on as normal windows.
     func dissolve(_ group: WindowGroup) {
         for window in group.windows {
             watcher.unwatch(window.windowID)
+            if window.windowID != group.activeID {
+                window.setFrame(group.frame)
+            }
         }
         group.bar.orderOut(nil)
         groups.removeAll { $0 === group }
@@ -260,7 +274,7 @@ final class GroupManager {
         shorter.size.height -= TabBarPanel.height
         window.setFrame(shorter)
         log.notice("No room for the tab bar, made \(window.description, privacy: .public) shorter")
-        syncFrames(of: group)
+        followActiveWindow(of: group)
     }
 
     private func checkFullScreen() {
@@ -282,17 +296,16 @@ final class GroupManager {
             positionBar(of: group)
         } else {
             log.notice("Group resumed after full screen")
-            syncFrames(of: group)
+            followActiveWindow(of: group)
         }
         return fullScreen
     }
 
-    /// Puts every window of the group at the active window's frame, and the bar with it.
-    private func syncFrames(of group: WindowGroup) {
-        guard let active = group.active, let frame = active.frame else { return }
-        for window in group.windows where window.windowID != active.windowID {
-            window.setFrame(frame)
-        }
+    /// The active window moved or resized: the group is wherever it is now, and the bar goes with it.
+    /// The parked tabs stay put; they get the new frame when you switch to them.
+    private func followActiveWindow(of group: WindowGroup) {
+        guard let frame = group.active?.frame else { return }
+        group.frame = frame
         positionBar(of: group)
     }
 
@@ -312,13 +325,13 @@ final class GroupManager {
     private func handle(_ event: WindowEvent) {
         switch event {
         case .frameChanged(let id):
-            // Only the active window leads. The others move because we move them,
-            // and their own move notifications land here too and are ignored.
+            // Only the active window leads. Parking the others sends move notifications
+            // too, and those are ignored.
             guard id != syncPausedID,
                   let group = group(containing: id), group.activeID == id, !group.isMinimized
             else { return }
             if updateFullScreen(of: group) { return }
-            syncFrames(of: group)
+            followActiveWindow(of: group)
 
         case .minimized(let id):
             // Minimizing the active tab sends the whole group to the Dock. The others' own
@@ -362,19 +375,17 @@ final class GroupManager {
         case .focusChanged:
             // Closing a window also moves focus, so this catches closes the watcher missed.
             removeClosedWindows()
-            // Cmd-Tab, the Dock or Mission Control may have brought a background tab forward.
-            // Minimizing the active tab hands focus to a background tab just before the
-            // minimize notification arrives: don't switch, or the whole group wouldn't follow.
+            // Cmd-`, the Window menu or Mission Control may have focused a parked tab:
+            // bring it into the group's frame. Minimizing the active tab hands focus to a
+            // background tab just before the minimize notification arrives: don't switch,
+            // or the whole group wouldn't follow.
             if let focused = WindowDriver.focusedWindow(),
-               let group = group(containing: focused.windowID),
+               let group = group(containing: focused.windowID), !group.isPaused,
                group.activeID != focused.windowID,
                !(group.active?.isMinimized ?? false) {
-                group.activeID = focused.windowID
-                refreshBar(of: group)
+                activate(focused.windowID, in: group)
             }
             checkFullScreen()
-            // Cmd-Tab and the Dock bring every window of an app forward, background tabs included.
-            fixStacking()
             // Any window may now cover a group, or a group window may be back on top:
             // keep every bar directly above its active window.
             groups.forEach(positionBar)

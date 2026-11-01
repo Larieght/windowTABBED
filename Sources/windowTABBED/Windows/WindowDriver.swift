@@ -83,11 +83,6 @@ struct ExternalWindow: Hashable, CustomStringConvertible {
         app?.activate()
     }
 
-    /// Moves the window up the stack without switching apps or touching the app's other windows.
-    func raiseInPlace() {
-        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
-    }
-
     func setMinimized(_ minimized: Bool) {
         AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, minimized as CFBoolean)
     }
@@ -154,11 +149,6 @@ enum WindowDriver {
     /// Every window the window server knows about, on screen or not (minimized, other Spaces).
     static func existingWindowIDs() -> Set<CGWindowID> {
         Set(windowInfo(onScreenOnly: false).map(\.id))
-    }
-
-    /// IDs of on-screen, normal-layer windows, front to back.
-    static func normalWindowOrder() -> [CGWindowID] {
-        windowInfo(onScreenOnly: true).filter(\.isNormalLayer).map(\.id)
     }
 
     /// The topmost normal window of another app under `point` (AX coordinates), skipping `excluded`.

@@ -15,7 +15,7 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 
 ## Tabs
 
-- Background windows are **stacked behind** the active one, at exactly the same frame.
+- Background windows are **parked** off the bottom corner of their display (a 1 pt sliver stays on screen), so they never trail behind a drag. Switching to one moves it into the group's frame. Quitting puts them back; after a crash, the next launch does.
 - Click a tab → that window comes to the front. Window content switches **instantly** (no fade).
 - Only the tabs animate: fast, slightly bouncy spring. Active tab rises, old one sinks.
 - **×** removes the window from the group. It never closes the real window.

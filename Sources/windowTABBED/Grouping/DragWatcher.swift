@@ -44,8 +44,11 @@ final class DragWatcher {
     }
 
     private func mouseDragged(keyHeld: Bool) {
-        guard let pressed, keyHeld else {
+        guard let pressed else { return }
+        guard keyHeld else {
             clearTarget()
+            // A plain drag: if it's moving a group's active window, keep its tab bar on it.
+            groups.followDrag(of: pressed.id)
             return
         }
 
