@@ -40,6 +40,14 @@ final class DebugHooks {
             let window = group.windows[n]
             window.setPosition(CGPoint(x: Double(parts[2]) ?? 0, y: Double(parts[3]) ?? 0))
             log.notice("debug: \(window.description, privacy: .public) now at \(String(describing: window.frame), privacy: .public)")
+        case ("settings", _, _):
+            SettingsWindow.shared.show()
+        case ("style", _, _) where parts.count == 2:
+            Settings.shared.tabStyle = TabStyle(rawValue: String(parts[1])) ?? .full
+        case ("record", _, _):
+            SettingsWindow.shared.recorder.start(onRecord: Settings.shared.useRecorded)
+        case ("press", _, _) where parts.count == 2:
+            press(String(parts[1]))
         case ("release", _, _):
             Self.releaseModifiers()
         case ("snapshot", _, _):
@@ -73,16 +81,14 @@ final class DebugHooks {
         }
     }
 
-    /// Posts press, 20 drag steps and release, ~16 ms apart, all carrying the grouping key's flag.
+    /// Posts press, 20 drag steps and release, ~16 ms apart, all carrying the grouping key's flags.
     private func keyDrag(from start: CGPoint, to end: CGPoint) {
-        let flags: CGEventFlags = switch Settings.shared.groupingKey {
-        case .shift: .maskShift
-        case .option: .maskAlternate
-        case .control: .maskControl
-        case .command: .maskCommand
-        case .fn: .maskSecondaryFn
-        case nil: []
-        }
+        let key = Settings.shared.groupingKey?.flags ?? []
+        let pairs: [(NSEvent.ModifierFlags, CGEventFlags)] = [
+            (.shift, .maskShift), (.option, .maskAlternate), (.control, .maskControl),
+            (.command, .maskCommand), (.function, .maskSecondaryFn),
+        ]
+        let flags = pairs.filter { key.contains($0.0) }.reduce(into: CGEventFlags()) { $0.insert($1.1) }
         func post(_ type: CGEventType, _ point: CGPoint) {
             let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)
             event?.flags = flags
@@ -99,6 +105,28 @@ final class DebugHooks {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.016 * Double(steps) + 0.3) {
             post(.leftMouseUp, end)
             Self.releaseModifiers()
+        }
+    }
+
+    /// Presses modifiers one by one (e.g. `press ctrl,opt`), then lets go of them one by one.
+    private func press(_ names: String) {
+        let keys: [String: (CGKeyCode, CGEventFlags)] = [
+            "shift": (56, .maskShift), "ctrl": (59, .maskControl), "opt": (58, .maskAlternate),
+            "cmd": (55, .maskCommand), "fn": (63, .maskSecondaryFn),
+        ]
+        let chosen = names.split(separator: ",").compactMap { keys[String($0)] }
+        var flags = CGEventFlags()
+        var steps: [CGEventFlags] = []
+        for (_, flag) in chosen { flags.insert(flag); steps.append(flags) }
+        for (_, flag) in chosen { flags.remove(flag); steps.append(flags) }
+        for (i, state) in steps.enumerated() {
+            let code = chosen[i % chosen.count].0
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1 * Double(i)) {
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)
+                event?.type = .flagsChanged
+                event?.flags = state
+                event?.post(tap: .cghidEventTap)
+            }
         }
     }
 

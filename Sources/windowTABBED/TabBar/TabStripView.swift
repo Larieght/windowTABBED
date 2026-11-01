@@ -14,7 +14,8 @@ struct TabStripView: View {
                     tab: tab,
                     isActive: tab.id == model.activeID,
                     flipped: model.flipped,
-                    width: model.tabWidth,
+                    iconOnly: model.iconOnly,
+                    width: model.width(isActive: tab.id == model.activeID),
                     onSelect: { model.onSelect?(tab.id) },
                     onClose: { model.onClose?(tab.id) },
                     onDragEnd: { translation in dragEnded(tab.id, translation) }
@@ -24,6 +25,7 @@ struct TabStripView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.flipped ? .topLeading : .bottomLeading)
         .animation(Self.spring, value: model.activeID)
         .animation(Self.spring, value: model.tabs.map(\.id))
+        .animation(Self.spring, value: model.iconOnly)
     }
 
     /// Out of the bar (up or down) detaches the window; sideways reorders.
@@ -33,7 +35,7 @@ struct TabStripView: View {
             return
         }
         guard let from = model.tabs.firstIndex(where: { $0.id == id }) else { return }
-        let step = model.tabWidth + TabBarPanel.tabSpacing
+        let step = model.width(isActive: false) + TabBarPanel.tabSpacing
         let to = from + Int((translation.width / step).rounded())
         if to != from {
             model.onMove?(id, to)
@@ -41,11 +43,13 @@ struct TabStripView: View {
     }
 }
 
-/// One tab: app icon + short title. Active = taller, full tint, gloss and ×. Background = short, dim, grey.
+/// One tab: app icon + short title (or just the icon). Active = taller, full tint, gloss and ×.
+/// Background = short, dim, grey.
 private struct TabChip: View {
     let tab: TabBarModel.Tab
     let isActive: Bool
     let flipped: Bool
+    let iconOnly: Bool
     let width: CGFloat
     let onSelect: () -> Void
     let onClose: () -> Void
@@ -70,12 +74,14 @@ private struct TabChip: View {
                 .resizable()
                 .frame(width: 16, height: 16)
                 .opacity(isActive ? 1 : 0.5)
-            Text(tab.title.isEmpty ? "Untitled" : tab.title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(isActive ? 1 : 0.45))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if !iconOnly {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(isActive ? 1 : 0.45))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             if isActive {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
@@ -89,11 +95,12 @@ private struct TabChip: View {
             }
         }
         .padding(.leading, 10)
-        .padding(.trailing, 8)
+        .padding(.trailing, iconOnly && !isActive ? 10 : 8)
         .frame(width: width, height: isActive ? Self.activeHeight : Self.inactiveHeight)
         .background(background)
         .clipShape(shape)
         .contentShape(shape)
+        .help(iconOnly ? title : "")
         // Follows the pointer sideways; fades once it's far enough up or down to come out.
         .offset(x: dragOffset.width)
         .opacity(abs(dragOffset.height) > Self.dragOutDistance ? 0.5 : 1)
@@ -104,6 +111,8 @@ private struct TabChip: View {
                 .updating($dragOffset) { value, offset, _ in offset = value.translation }
                 .onEnded { onDragEnd($0.translation) })
     }
+
+    private var title: String { tab.title.isEmpty ? "Untitled" : tab.title }
 
     private var shape: UnevenRoundedRectangle {
         let r = Self.radius

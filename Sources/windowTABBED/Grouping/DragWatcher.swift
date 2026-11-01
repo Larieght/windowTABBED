@@ -25,8 +25,7 @@ final class DragWatcher {
 
     /// Read from each event rather than the global key state, so it matches what that event carried.
     private static func keyHeld(in event: NSEvent) -> Bool {
-        guard let key = Settings.shared.groupingKey else { return false }
-        return event.modifierFlags.contains(key.flag)
+        Settings.shared.groupingKey?.isHeld(in: event) ?? false
     }
 
     private func monitor(_ mask: NSEvent.EventTypeMask, _ handler: @escaping (DragWatcher, NSEvent) -> Void) {
