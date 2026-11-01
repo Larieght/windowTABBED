@@ -119,6 +119,7 @@ private struct SettingsView: View {
                 Button(recorder.isRecording ? "Cancel" : "Record Custom Combination…") {
                     recorder.isRecording ? recorder.cancel() : recorder.start(onRecord: settings.useRecorded)
                 }
+                .glassButton()
                 if recorder.isRecording {
                     Text(recorder.held.isEmpty ? "Hold the keys you want, then let go" : recorder.held.symbols)
                         .foregroundStyle(.secondary)
@@ -138,13 +139,7 @@ private struct SettingsView: View {
 
             Text("Tabs")
                 .font(.headline)
-            Picker("Tab style", selection: $settings.tabStyle) {
-                ForEach(TabStyle.allCases) { style in
-                    Text(style.label).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            tabStylePicker
 
             Divider()
 
@@ -156,10 +151,86 @@ private struct SettingsView: View {
                 Spacer()
                 Button("Done", action: onDone)
                     .keyboardShortcut(.defaultAction)
+                    .glassButton(prominent: true)
                     .disabled(settings.groupingKey == nil || recorder.isRecording)
             }
         }
         .padding(20)
         .frame(width: 400)
+    }
+
+    /// On macOS 26+, a Liquid Glass segmented control. Earlier systems keep the standard one.
+    @ViewBuilder private var tabStylePicker: some View {
+        if #available(macOS 26, *) {
+            GlassSegmentedPicker(selection: $settings.tabStyle)
+        } else {
+            Picker("Tab style", selection: $settings.tabStyle) {
+                ForEach(TabStyle.allCases) { style in
+                    Text(style.label).tag(style)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+    }
+}
+
+private extension View {
+    /// Liquid Glass buttons, in Settings only: the tab bar keeps its Aqua look on purpose.
+    /// Needs macOS 26; earlier systems keep the standard buttons.
+    /// macOS draws prominent glass with rounded corners whatever the shape, so a set of buttons
+    /// where one may be prominent asks for `capsule: false` to match it.
+    @ViewBuilder func glassButton(prominent: Bool = false, capsule: Bool = true) -> some View {
+        if #available(macOS 26, *) {
+            Group {
+                if prominent {
+                    buttonStyle(.glassProminent)
+                } else {
+                    buttonStyle(.glass)
+                }
+            }
+            .buttonBorderShape(capsule ? .capsule : .roundedRectangle)
+            .controlSize(.large)
+        } else {
+            self
+        }
+    }
+}
+
+/// One glass capsule holding both tab styles. The chosen one sits on a tinted glass pill
+/// that springs across when you pick the other.
+@available(macOS 26, *)
+private struct GlassSegmentedPicker: View {
+    @Binding var selection: TabStyle
+    @Namespace private var thumb
+
+    private static let spring = Animation.spring(response: 0.32, dampingFraction: 0.72)
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(TabStyle.allCases) { style in
+                let isSelected = selection == style
+                Text(style.label)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .white : .primary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background {
+                        if isSelected {
+                            Capsule()
+                                .fill(.clear)
+                                .glassEffect(.regular.tint(.accentColor).interactive(), in: Capsule())
+                                .matchedGeometryEffect(id: "thumb", in: thumb)
+                        }
+                    }
+                    .contentShape(Capsule())
+                    .onTapGesture {
+                        withAnimation(Self.spring) { selection = style }
+                    }
+            }
+        }
+        .padding(3)
+        .glassEffect(.regular, in: Capsule())
+        .animation(Self.spring, value: selection)
     }
 }

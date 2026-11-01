@@ -84,7 +84,9 @@ Safe on-screen testing, learned the hard way:
 ## Design rules (the user's choices)
 
 - Tack-style tabs: app icon + short title, left-aligned, not full width. An "icon only" style is a
-  setting. Light Aqua gradient and gloss, strong active/background contrast. **No Liquid Glass.**
+  setting. Light Aqua gradient and gloss, strong active/background contrast. **No Liquid Glass**,
+  except the Settings window's buttons (`glassButton()` in `SettingsWindow.swift`, macOS 26+), which
+  the user asked for there only.
   Figma: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 - Tab switches use a fast, jumpy spring (stiffness 700, damping 18). **Only the tabs animate**: the
   real window's content swaps instantly, with no fade.
