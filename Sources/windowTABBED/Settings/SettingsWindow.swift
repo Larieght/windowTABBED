@@ -20,7 +20,7 @@ final class SettingsWindow {
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 380),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false)
@@ -59,6 +59,12 @@ private struct SettingsView: View {
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
+
+            Divider()
+
+            Text("Keyboard")
+                .font(.headline)
+            Toggle("Switch tabs with ⌃⌥← and ⌃⌥→", isOn: $settings.tabShortcutsEnabled)
 
             HStack {
                 Spacer()

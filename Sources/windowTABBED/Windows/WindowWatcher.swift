@@ -5,6 +5,9 @@ enum WindowEvent {
     /// A watched window was moved or resized (by the user, its app, or us).
     case frameChanged(CGWindowID)
     case titleChanged(CGWindowID)
+    /// Sent to the Dock (yellow button, Cmd-M) or back out of it.
+    case minimized(CGWindowID)
+    case restored(CGWindowID)
     /// A watched window closed, or its app quit. It is no longer watched.
     case closed(CGWindowID)
     /// Some window of a watched app was destroyed, but we couldn't tell which (Finder does this).
@@ -34,6 +37,8 @@ final class WindowWatcher {
         kAXResizedNotification,
         kAXTitleChangedNotification,
         kAXUIElementDestroyedNotification,
+        kAXWindowMiniaturizedNotification,
+        kAXWindowDeminiaturizedNotification,
     ]
 
     init() {
@@ -103,6 +108,10 @@ final class WindowWatcher {
             onEvent?(.frameChanged(entry.id))
         case kAXTitleChangedNotification:
             onEvent?(.titleChanged(entry.id))
+        case kAXWindowMiniaturizedNotification:
+            onEvent?(.minimized(entry.id))
+        case kAXWindowDeminiaturizedNotification:
+            onEvent?(.restored(entry.id))
         case kAXUIElementDestroyedNotification:
             unwatch(entry.id)
             onEvent?(.closed(entry.id))

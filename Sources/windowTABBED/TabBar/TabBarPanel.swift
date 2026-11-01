@@ -55,15 +55,27 @@ final class TabBarPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// Places the bar on the window's top edge, or under it when there's no room above,
-    /// and orders it just above that window.
-    func attach(above windowID: CGWindowID, frame: CGRect) {
+    enum Placement {
+        /// On the window's top edge (normal).
+        case above
+        /// Under the window, tabs upside down: no room above.
+        case below
+        /// Over the top of the window: no room anywhere and the window wouldn't shrink.
+        case overlapping
+    }
+
+    /// Where the bar fits for a window at `frame`, or nil if it fits neither above nor below.
+    static func placement(for frame: CGRect) -> Placement? {
         let visible = ScreenGeometry.visibleFrame(containing: frame)
+        if frame.minY - height >= visible.minY { return .above }
+        if frame.maxY + height <= visible.maxY { return .below }
+        return nil
+    }
+
+    /// Positions the bar for that window and orders it just above it.
+    func attach(above windowID: CGWindowID, frame: CGRect, placement: Placement) {
         let height = Self.height
-        let roomAbove = frame.minY - height >= visible.minY
-        let roomBelow = frame.maxY + height <= visible.maxY
-        // TODO: no room either way → shrink the window by `height` (SPEC.md, later step).
-        let flipped = !roomAbove && roomBelow
+        let flipped = placement == .below
         if model.flipped != flipped { model.flipped = flipped }
 
         let count = CGFloat(max(model.tabs.count, 1))
@@ -72,12 +84,12 @@ final class TabBarPanel: NSPanel {
         let tabWidth = min(Self.maxTabWidth, max(Self.minTabWidth, (available - spacing) / count))
         if model.tabWidth != tabWidth { model.tabWidth = tabWidth }
 
-        let barFrame = CGRect(
-            x: frame.minX + Self.inset,
-            y: flipped ? frame.maxY : frame.minY - height,
-            width: min(available, tabWidth * count + spacing),
-            height: height
-        )
+        let y = switch placement {
+        case .above: frame.minY - height
+        case .below: frame.maxY
+        case .overlapping: frame.minY
+        }
+        let barFrame = CGRect(x: frame.minX + Self.inset, y: y, width: min(available, tabWidth * count + spacing), height: height)
         setFrame(ScreenGeometry.appKitRect(fromAX: barFrame), display: true)
         order(.above, relativeTo: Int(windowID))
     }

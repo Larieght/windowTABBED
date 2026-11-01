@@ -33,6 +33,7 @@ final class Settings: ObservableObject {
 
     private enum Key {
         static let groupingKey = "groupingKey"
+        static let tabShortcuts = "tabShortcutsEnabled"
     }
 
     /// No default on purpose: you pick it on first launch (SPEC.md).
@@ -40,7 +41,13 @@ final class Settings: ObservableObject {
         didSet { UserDefaults.standard.set(groupingKey?.rawValue, forKey: Key.groupingKey) }
     }
 
+    /// Ctrl+Option+←/→ to switch tabs. Off by default so it never steals those keys from your apps.
+    @Published var tabShortcutsEnabled: Bool {
+        didSet { UserDefaults.standard.set(tabShortcutsEnabled, forKey: Key.tabShortcuts) }
+    }
+
     private init() {
         groupingKey = UserDefaults.standard.string(forKey: Key.groupingKey).flatMap(GroupingKey.init(rawValue:))
+        tabShortcutsEnabled = UserDefaults.standard.bool(forKey: Key.tabShortcuts)
     }
 }

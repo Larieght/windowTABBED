@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let permissions = Permissions()
     private var groups: GroupManager?
     private var dragWatcher: DragWatcher?
+    private var tabShortcuts: TabShortcuts?
     #if DEBUG
     private var debugHooks: DebugHooks?
     #endif
@@ -38,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let groups = GroupManager()
         self.groups = groups
         dragWatcher = DragWatcher(groups: groups)
+        tabShortcuts = TabShortcuts(groups: groups)
         if Settings.shared.groupingKey == nil {
             SettingsWindow.shared.show(welcome: true)
         }
