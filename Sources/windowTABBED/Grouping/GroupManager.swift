@@ -31,6 +31,10 @@ final class GroupManager {
     private let watcher = WindowWatcher()
     /// A window being carried with the grouping key held: its group doesn't follow it.
     private var syncPausedID: CGWindowID?
+    /// A group's active window you're dragging normally. Its bar follows the window server
+    /// (followDrag), so the app's own move notifications, which arrive late, are ignored until
+    /// you let go.
+    private var draggingID: CGWindowID?
     /// How often we tried making a window one bar shorter, so we don't fight an app that refuses.
     private var shrinkAttempts: [CGWindowID: Int] = [:]
     private var pendingShrinks: [CGWindowID: DispatchWorkItem] = [:]
@@ -45,7 +49,9 @@ final class GroupManager {
         // Safety net for apps that close windows without telling Accessibility (Finder).
         // Also for full screen, which doesn't always send a resize notification.
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self, !self.groups.isEmpty else { return }
+            // Not mid-drag: the full screen check asks the app through Accessibility, and an app
+            // whose window is being dragged can't answer, which froze the bar for half a second.
+            guard let self, !self.groups.isEmpty, self.draggingID == nil, self.syncPausedID == nil else { return }
             self.removeClosedWindows()
             self.checkFullScreen()
         }
@@ -184,7 +190,16 @@ final class GroupManager {
         guard let group = group(containing: id), group.activeID == id, !group.isPaused,
               let frame = WindowDriver.serverFrame(of: id)
         else { return }
-        group.bar.attach(above: id, frame: frame, placement: TabBarPanel.placement(for: frame) ?? .overlapping)
+        let first = draggingID != id
+        draggingID = id
+        group.bar.attach(above: id, frame: frame, placement: TabBarPanel.placement(for: frame) ?? .overlapping, reorder: first)
+    }
+
+    /// The button went up: the group catches up with wherever the window ended.
+    func endDrag() {
+        guard let id = draggingID else { return }
+        draggingID = nil
+        handle(.frameChanged(id))
     }
 
     /// While a window is carried with the grouping key held, its group stays put.
@@ -327,7 +342,7 @@ final class GroupManager {
         case .frameChanged(let id):
             // Only the active window leads. Parking the others sends move notifications
             // too, and those are ignored.
-            guard id != syncPausedID,
+            guard id != syncPausedID, id != draggingID,
                   let group = group(containing: id), group.activeID == id, !group.isMinimized
             else { return }
             if updateFullScreen(of: group) { return }
@@ -392,3 +407,4 @@ final class GroupManager {
         }
     }
 }
+

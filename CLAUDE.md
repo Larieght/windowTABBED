@@ -17,6 +17,9 @@ repo and code all say windowTABBED.
 - `build.sh` links with `-platform_version macos 14.0 <SDK>`. Plain `swift build` records the
   deployment target (14.0) as the SDK, and macOS then shows the app in the pre-26 compatibility
   look: old title bar and traffic lights, and glass controls drawn as their older fallback.
+- `build.sh` also stamps the commit into Info.plist (`WTCommit`, `-dirty` with uncommitted changes)
+  and the config (`WTBuildConfig`). The menu header shows them: `windowTABBED 1.0.0 (5b945aa, debug)`.
+  When the user reports a bug, ask what that line says to know which build they're running.
 - No `@State` and other macro-based SwiftUI: the macro plugin ships only with Xcode. Use
   `@GestureState`, or an `ObservableObject` held outside the view.
 - Reinstalling kills the running app without `applicationWillTerminate`, so parked tabs stay
@@ -43,7 +46,10 @@ repo and code all say windowTABBED.
   the active window. Moving another app's window always lags a few frames, so stacked tabs
   trailed behind every drag. A switched-to tab gets moved into `group.frame`.
 - **During a drag, the bar follows the window server position**, not AX notifications, which
-  arrive late. Adding the pointer's latest movement on top cut the lag but made the bar jiggle, and
+  arrive late, and those notifications are ignored until the button goes up (`draggingID`). Each
+  update looks up one window and only moves the bar, with no redraw or restacking, which keeps it at
+  the display's 120 Hz. The 1 s timer skips its Accessibility checks mid-drag: the dragged app can't
+  answer them, and waiting froze the bar. Adding the pointer's latest movement on top cut the lag but made the bar jiggle, and
   the user preferred the steady version. Linking the bar to the window server-side
   (`SLSAddWindowToWindowMovementGroup`) fails with error 1001 for windows of another app.
 - **Raising a window also sets `kAXFrontmost` on its app**: since macOS 14, a background app's
@@ -64,7 +70,11 @@ The user wants Claude to test on screen itself rather than hand tests back.
   - Drags: `keydrag x1 y1 x2 y2` (with the grouping key), `drag x1 y1 x2 y2` (plain, logs the
     bar's lag), `setpos n x y`.
   - Settings: `settings`, `style full|icon`, `record`, `press ctrl,opt`.
-  - Other: `release` (clears stuck modifiers), `snapshot` (saves the bars and Settings to `build/*.png`).
+  - Other: `release` (clears stuck modifiers), `snapshot` (saves the bars and Settings to `build/*.png`),
+    `menu` (logs the status menu's items).
+- Scripts have Accessibility access (granted 2026-11-02), so `osascript` can drive WT's real menu.
+  WT has no app menu, so its status item is `menu bar item 1 of menu bar 1` of process
+  "windowTABBED": click it, read `name of every menu item of menu 1`, then `key code 53` closes it.
 - Computer use can't click WT's own windows or see them in screenshots. Check WT through `snapshot`
   images and window server listings instead.
 

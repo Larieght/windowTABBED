@@ -95,7 +95,9 @@ final class TabBarPanel: NSPanel {
     }
 
     /// Positions the bar for that window and orders it just above it.
-    func attach(above windowID: CGWindowID, frame: CGRect, placement: Placement) {
+    /// `reorder: false` skips putting the bar back above the window, for repeat moves during a
+    /// drag: the stacking can't change then, and every saved call keeps the bar smooth.
+    func attach(above windowID: CGWindowID, frame: CGRect, placement: Placement, reorder: Bool = true) {
         lastAttach = (windowID, frame, placement)
         let height = Self.height
         let flipped = placement == .below
@@ -116,8 +118,16 @@ final class TabBarPanel: NSPanel {
             ? Self.iconTabWidth * (count - 1) + Self.iconActiveTabWidth + spacing
             : tabWidth * count + spacing
         let barFrame = CGRect(x: frame.minX + Self.inset, y: y, width: min(available, tabsWidth), height: height)
-        setFrame(ScreenGeometry.appKitRect(fromAX: barFrame), display: true)
-        order(.above, relativeTo: Int(windowID))
+        let target = ScreenGeometry.appKitRect(fromAX: barFrame)
+        if target.size == self.frame.size {
+            // Only moving: no relayout or redraw.
+            setFrameOrigin(target.origin)
+        } else {
+            setFrame(target, display: true)
+        }
+        if reorder {
+            order(.above, relativeTo: Int(windowID))
+        }
     }
 }
 

@@ -40,6 +40,9 @@ final class DebugHooks {
             let window = group.windows[n]
             window.setPosition(CGPoint(x: Double(parts[2]) ?? 0, y: Double(parts[3]) ?? 0))
             log.notice("debug: \(window.description, privacy: .public) now at \(String(describing: window.frame), privacy: .public)")
+        case ("menu", _, _):
+            let titles = (NSApp.delegate as? AppDelegate)?.currentMenuTitles() ?? []
+            log.notice("debug: menu \(titles.joined(separator: " | "), privacy: .public)")
         case ("settings", _, _):
             SettingsWindow.shared.show()
         case ("style", _, _) where parts.count == 2:
@@ -158,12 +161,12 @@ final class DebugHooks {
         DispatchQueue.global(qos: .userInteractive).async {
             var samples: [CGFloat] = []
             post(.leftMouseDown, start)
-            let steps = 60
+            let steps = 120
             for step in 1...steps {
-                usleep(8_000)
+                usleep(4_000)
                 let t = CGFloat(step) / CGFloat(steps)
                 post(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t))
-                usleep(8_000)
+                usleep(4_000)
                 if step > 5 { samples.append(lag()) }
             }
             usleep(100_000)

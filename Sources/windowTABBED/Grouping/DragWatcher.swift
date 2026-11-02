@@ -82,6 +82,7 @@ final class DragWatcher {
     }
 
     private func mouseUp(keyHeld: Bool) {
+        groups.endDrag()
         defer { reset() }
         guard let dragged else { return }
         if let target, keyHeld {

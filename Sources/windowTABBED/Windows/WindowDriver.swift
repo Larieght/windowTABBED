@@ -177,7 +177,15 @@ enum WindowDriver {
 
     /// Frame of a window straight from the window server, without asking its app.
     static func serverFrame(of id: CGWindowID) -> CGRect? {
-        windowInfo(onScreenOnly: true).first { $0.id == id }?.bounds
+        // Ask about this one window only: listing them all takes milliseconds, and this runs on
+        // every mouse move of a drag.
+        // The array holds raw window numbers, not objects, so no retain callbacks.
+        var value = UnsafeRawPointer(bitPattern: UInt(id))
+        guard let ids = CFArrayCreate(nil, &value, 1, nil),
+              let entry = (CGWindowListCreateDescriptionFromArray(ids) as? [[String: Any]])?.first,
+              let bounds = entry[kCGWindowBounds as String] as? NSDictionary
+        else { return nil }
+        return CGRect(dictionaryRepresentation: bounds as CFDictionary)
     }
 
     private struct WindowInfo {

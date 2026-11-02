@@ -50,11 +50,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Menu
 
+    #if DEBUG
+    /// The menu as it would show right now, for the `menu` debug command.
+    func currentMenuTitles() -> [String] {
+        guard let menu = statusItem.menu else { return [] }
+        menuNeedsUpdate(menu)
+        return menu.items.map { $0.isSeparatorItem ? "—" : $0.title }
+    }
+    #endif
+
     // Rebuilt every time it opens, so the permission line is always current.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        menu.addItem(disabledItem("windowTABBED"))
+        menu.addItem(disabledItem("windowTABBED \(Self.versionDescription)"))
         menu.addItem(.separator())
 
         if let groups {
@@ -75,6 +84,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settings.target = self
         menu.addItem(settings)
         menu.addItem(withTitle: "Quit windowTABBED", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    }
+
+    /// "1.0.0 (5b945aa)", plus ", debug" for debug builds. The commit comes from build.sh.
+    private static var versionDescription: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "?"
+        var details = [info["WTCommit"] as? String ?? "unknown"]
+        if info["WTBuildConfig"] as? String == "debug" { details.append("debug") }
+        return "\(version) (\(details.joined(separator: ", ")))"
     }
 
     private func disabledItem(_ title: String) -> NSMenuItem {

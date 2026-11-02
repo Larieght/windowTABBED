@@ -39,6 +39,11 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN_DIR/windowTABBED" "$APP/Contents/MacOS/windowTABBED"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# Which commit this build is, shown in the menu next to the version. "-dirty" means it has
+# uncommitted changes on top.
+COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then COMMIT="$COMMIT-dirty"; fi
+/usr/libexec/PlistBuddy -c "Add :WTCommit string $COMMIT" -c "Add :WTBuildConfig string $CONFIG" "$APP/Contents/Info.plist"
 
 IDENTITY="${WT_SIGN_IDENTITY:-windowTABBED Dev}"
 if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
