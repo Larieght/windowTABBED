@@ -6,6 +6,8 @@
 	<string>windowTABBED</string>
 	<key>CFBundleExecutable</key>
 	<string>windowTABBED</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>local.larieght.windowtabbed</string>
 	<key>CFBundleName</key>

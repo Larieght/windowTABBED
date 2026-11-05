@@ -39,6 +39,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN_DIR/windowTABBED" "$APP/Contents/MacOS/windowTABBED"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+mkdir -p "$APP/Contents/Resources"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # Which commit this build is, shown in the menu next to the version. "-dirty" means it has
 # uncommitted changes on top.
 COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"

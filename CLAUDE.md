@@ -20,6 +20,9 @@ repo and code all say windowTABBED.
 - `build.sh` also stamps the commit into Info.plist (`WTCommit`, `-dirty` with uncommitted changes)
   and the config (`WTBuildConfig`). The menu header shows them: `windowTABBED 1.0.0 (5b945aa, debug)`.
   When the user reports a bug, ask what that line says to know which build they're running.
+- App icon: `Resources/AppIcon.icns`, built by `scripts/make-icon.sh` from
+  `Resources/Icon/AppIcon-1024.png`, the 1024 px export of design 08g ("Two-Tone Mirror") on the
+  Figma file's App Icon page ("AppIcon 1024 (export)" frame). Change it there, re-export, rerun.
 - No `@State` and other macro-based SwiftUI: the macro plugin ships only with Xcode. Use
   `@GestureState`, or an `ObservableObject` held outside the view.
 - Reinstalling kills the running app without `applicationWillTerminate`, so parked tabs stay
