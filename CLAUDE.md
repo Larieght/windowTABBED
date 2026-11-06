@@ -1,28 +1,33 @@
 # windowTABBED
 
-A personal macOS menu bar app (one user, not distributed) that groups windows from any app into
-browser-style tabs. Pinning windows on top is planned next. "WT" is just chat shorthand: the app,
-repo and code all say windowTABBED.
+A macOS menu bar app that groups windows from any app into browser-style tabs. Open source under
+the MIT license. Pinning windows on top is planned next. "WT" is shorthand: the app, repo and code
+all say windowTABBED.
 
-`SPEC.md` holds the behavior rules (grouping, tabs, sync, placement). Keep it in step with the code.
+This file is the guide for anyone working on the code, people and AI agents alike. `README.md` is
+for users. `SPEC.md` holds the behavior rules (grouping, tabs, sync, placement): keep it in step
+with the code.
 
 ## Build and run
 
-- Swift 6 with command-line tools only, **no Xcode**. SwiftPM, Swift 5 language mode, macOS 14+.
+- Swift 6 with command-line tools only, **no Xcode needed**. SwiftPM, Swift 5 language mode,
+  macOS 14+.
 - `scripts/build.sh debug --install` builds `build/windowTABBED.app`, copies it to
   `/Applications` and relaunches it. Use the installed copy, which is the one granted Accessibility.
-- It signs with the self-signed `windowTABBED Dev` certificate in the login keychain, which keeps the
-  Accessibility permission across rebuilds. If the permission is suddenly gone, check that the
-  certificate still exists before asking the user to re-allow it.
+- Signing: macOS remembers the Accessibility permission by the app's signature. `build.sh` signs
+  with a self-signed certificate named `windowTABBED Dev` if the login keychain has one (or
+  `$WT_SIGN_IDENTITY`), which keeps the permission across rebuilds. Without it the build is signed
+  ad-hoc and Accessibility has to be allowed again after every build. If the permission is
+  suddenly gone, check the certificate still exists before re-allowing it.
 - `build.sh` links with `-platform_version macos 14.0 <SDK>`. Plain `swift build` records the
   deployment target (14.0) as the SDK, and macOS then shows the app in the pre-26 compatibility
   look: old title bar and traffic lights, and glass controls drawn as their older fallback.
 - `build.sh` also stamps the commit into Info.plist (`WTCommit`, `-dirty` with uncommitted changes)
-  and the config (`WTBuildConfig`). The menu header shows them: `windowTABBED 1.0.0 (5b945aa, debug)`.
-  When the user reports a bug, ask what that line says to know which build they're running.
+  and the config (`WTBuildConfig`). The menu header shows them: `windowTABBED 1.1.0 (5b945aa, debug)`.
+  Bug reports should include that line, so you know which build is running.
 - App icon: `Resources/AppIcon.icns`, built by `scripts/make-icon.sh` from
-  `Resources/Icon/AppIcon-1024.png`, the 1024 px export of design 08g ("Two-Tone Mirror") on the
-  Figma file's App Icon page ("AppIcon 1024 (export)" frame). Change it there, re-export, rerun.
+  `Resources/Icon/AppIcon-1024.png` (design "08g", from the maintainer's Figma file). To change
+  it, replace the PNG and rerun the script.
 - No `@State` and other macro-based SwiftUI: the macro plugin ships only with Xcode. Use
   `@GestureState`, or an `ObservableObject` held outside the view.
 - Reinstalling kills the running app without `applicationWillTerminate`, so parked tabs stay
@@ -50,11 +55,11 @@ repo and code all say windowTABBED.
   trailed behind every drag. A switched-to tab gets moved into `group.frame`.
 - **During a drag, the bar follows the window server position**, not AX notifications, which
   arrive late, and those notifications are ignored until the button goes up (`draggingID`). Each
-  update looks up one window and only moves the bar, with no redraw or restacking, which keeps it at
-  the display's 120 Hz. The 1 s timer skips its Accessibility checks mid-drag: the dragged app can't
-  answer them, and waiting froze the bar. Adding the pointer's latest movement on top cut the lag but made the bar jiggle, and
-  the user preferred the steady version. Linking the bar to the window server-side
-  (`SLSAddWindowToWindowMovementGroup`) fails with error 1001 for windows of another app.
+  update looks up one window and only moves the bar, with no redraw or restacking, which keeps it
+  at the display's refresh rate. The 1 s timer skips its Accessibility checks mid-drag: the dragged
+  app can't answer them, and waiting froze the bar. Adding the pointer's latest movement on top cut
+  the lag but made the bar jiggle, so the steady version stays. Linking the bar to the window
+  server-side (`SLSAddWindowToWindowMovementGroup`) fails with error 1001 for another app's windows.
 - **Raising a window also sets `kAXFrontmost` on its app**: since macOS 14, a background app's
   `activate()` request can be ignored after a click on the non-activating bar.
 - **The grouping key is modifiers only** (⇧ ⌃ ⌥ ⌘ fn), so holding it never types into the app.
@@ -62,7 +67,8 @@ repo and code all say windowTABBED.
 
 ## Debugging and testing
 
-The user wants Claude to test on screen itself rather than hand tests back.
+Test changes on screen with a debug build rather than only reasoning about them: most bugs here
+are timing and window-server behavior that only show up live.
 
 - Logs: `os.Logger` with subsystem `windowTABBED`, logged `privacy: .public`. Read them with
   `/usr/bin/log show --last 30s --predicate 'subsystem == "windowTABBED"' --style compact`.
@@ -73,41 +79,44 @@ The user wants Claude to test on screen itself rather than hand tests back.
   - Drags: `keydrag x1 y1 x2 y2` (with the grouping key), `drag x1 y1 x2 y2` (plain, logs the
     bar's lag), `setpos n x y`.
   - Settings: `settings`, `style full|icon`, `record`, `press ctrl,opt`.
-  - Other: `release` (clears stuck modifiers), `snapshot` (saves the bars and Settings to `build/*.png`),
-    `menu` (logs the status menu's items).
-- Scripts have Accessibility access (granted 2026-11-02), so `osascript` can drive WT's real menu.
-  WT has no app menu, so its status item is `menu bar item 1 of menu bar 1` of process
-  "windowTABBED": click it, read `name of every menu item of menu 1`, then `key code 53` closes it.
-- Computer use can't click WT's own windows or see them in screenshots. Check WT through `snapshot`
-  images and window server listings instead.
+  - Other: `release` (clears stuck modifiers), `snapshot` (saves the bars and Settings to
+    `build/*.png`), `menu` (logs the status menu's items).
+- With Accessibility allowed for the terminal, `osascript` can drive WT's real menu. WT has no app
+  menu, so its status item is `menu bar item 1 of menu bar 1` of process "windowTABBED": click it,
+  read `name of every menu item of menu 1`, then `key code 53` closes it.
+- Computer-use tools can't click WT's own windows or see them in screenshots. Check WT through
+  `snapshot` images, `screencapture -l <windowID>` and window server listings instead.
 
-Safe on-screen testing, learned the hard way:
+Safe on-screen testing, learned the hard way. You're testing on someone's real desktop:
 
-- **Test with your own throwaway windows** (new TextEdit documents set with `osascript ... set bounds`).
-  Put them where none of the user's windows are, and list every on-screen window first. A drop
-  point that lands on a user window groups it.
+- **Test with throwaway windows** (new TextEdit documents set with `osascript ... set bounds`).
+  List every on-screen window first and put the test windows where no others are. A drop point
+  that lands on someone's real window groups it.
 - Start drags on a blank part of the title bar. TextEdit's "Edited" title button eats the click.
 - Events posted with modifier flags leave them set system-wide. Check the flags afterwards and run
-  `release` if anything is stuck, or the user's own drags start grouping windows.
+  `release` if anything is stuck, or ordinary drags start grouping windows.
 - A full-screen computer-use screenshot hides other apps, and releasing control doesn't bring them
   back. Unhide them (`System Events` › `set visible of process ... to true`), or prefer
   `app_screenshot`.
-- Changing the user's settings while testing? Put them back afterwards: quit WT, run
+- Changed settings while testing? Put them back afterwards: quit WT, run
   `defaults write local.larieght.windowtabbed ...`, then relaunch.
 - macOS ignores a background app's `activate()` when no click caused it. To bring Settings to the
   front for a test, use `osascript -e 'tell application "windowTABBED" to activate'`.
+- Screenshots for docs or issues: keep personal content out (Finder sidebars, file names, browser
+  tabs). Use throwaway documents.
 
-## Design rules (the user's choices)
+## Design rules
+
+The maintainer's choices. Discuss before changing them.
 
 - Tack-style tabs: app icon + short title, left-aligned, not full width. An "icon only" style is a
   setting. Light Aqua gradient and gloss, strong active/background contrast. **No Liquid Glass**,
-  except the Settings window's buttons (`glassButton()` in `SettingsWindow.swift`, macOS 26+), which
-  the user asked for there only.
-  Figma: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
+  except the Settings window's controls (`glassButton()` and the segmented picker in
+  `SettingsWindow.swift`, macOS 26+).
 - Tab switches use a fast, jumpy spring (stiffness 700, damping 18). **Only the tabs animate**: the
   real window's content swaps instantly, with no fade.
 
-## Working with the user
+## Working on this repo
 
-- Ask clarifying questions when a choice is theirs to make; they like being asked.
-- Commit and push only when asked. Commits end with the `Co-Authored-By` line.
+- Ask before making a choice that changes behavior or design; don't guess.
+- Commit and push only when asked.

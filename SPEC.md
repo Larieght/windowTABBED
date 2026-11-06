@@ -1,6 +1,6 @@
 # windowTABBED — v1 spec (tabbing only)
 
-Personal-use macOS menu bar app. Swift + AppKit (SwiftUI for the tab bar view).
+macOS menu bar app. Swift + AppKit (SwiftUI for the tab bar view).
 Groups windows from any app into browser-style tabs. Pinning comes after v1.
 
 Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
