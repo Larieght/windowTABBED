@@ -21,6 +21,8 @@ apps. Hold a key, drag one window onto another, and they share a tab bar. Click 
   Minimize one and the group minimizes, go full screen and the bar steps aside.
 - **Drag tabs** to reorder them, or pull one out of the bar to take it out of the group. Choose what
   follows your pointer: the window itself, an outline of where it will land, or just the tab.
+- **Pin a tab bar on top.** Right-click a bar to keep it above other windows, so the group is one
+  click away even when it's covered.
 - **Smart placement.** The bar sits above the window, or flips below it when there's no room.
 - **Themes**: Aqua, Liquid Glass and Retro 98, plus experimental Flat, Pill and Metallic.
 - **Four sizes**, from Small to Extra Large, and **icon-only tabs** if you prefer a compact bar.
@@ -57,6 +59,7 @@ apps. Hold a key, drag one window onto another, and they share a tab bar. Click 
 | Reorder tabs | Drag a tab along the bar. |
 | Take a window out | Click the tab's **×** (the window stays open), or drag the tab off the bar. |
 | Move the group | Drag the active window's title bar. |
+| Keep a group's tabs on top | Right-click its tab bar › **Pin Tab Bar on Top**. Settings › Pinned tab bars picks whether it dims while covered. |
 | Ungroup everything | Menu bar icon › **Ungroup All**. |
 
 A group with only one window left dissolves on its own. Quitting windowTABBED puts every window

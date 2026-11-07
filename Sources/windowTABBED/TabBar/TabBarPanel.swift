@@ -73,6 +73,32 @@ final class TabBarPanel: NSPanel {
     /// Where the bar is, in AX coordinates.
     private(set) var axFrame: CGRect = .zero
     private var styleSubscription: AnyCancellable?
+    private var lookSubscription: AnyCancellable?
+
+    /// Right-click › Pin Tab Bar on Top: the bar floats above every normal window, so you can
+    /// still reach the group's tabs while other windows cover it.
+    var isPinned = false {
+        didSet {
+            guard isPinned != oldValue else { return }
+            level = isPinned ? .floating : .normal
+            if !isPinned, let last = lastAttach, isVisible {
+                order(.above, relativeTo: Int(last.windowID))
+            }
+            updateDimming()
+        }
+    }
+    /// Another window covers the group (only tracked while pinned).
+    var isCovered = false {
+        didSet { if isCovered != oldValue { updateDimming() } }
+    }
+    private var isHovered = false {
+        didSet { if isHovered != oldValue { updateDimming() } }
+    }
+    /// Asked to pin or unpin from the bar's right-click menu.
+    var onTogglePin: (() -> Void)?
+
+    /// How faint a pinned, covered bar is with Settings › Pinned tab bars › Dimmed.
+    static let dimmedAlpha: CGFloat = 0.4
 
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -86,7 +112,13 @@ final class TabBarPanel: NSPanel {
         isMovable = false
         // Keep it out of Cmd-` and Mission Control's window list.
         collectionBehavior = [.managed, .ignoresCycle]
-        contentView = FirstMouseHostingView(rootView: TabStripView(model: model))
+        let host = FirstMouseHostingView(rootView: TabStripView(model: model))
+        host.onHover = { [weak self] inside in self?.isHovered = inside }
+        host.contextMenu = { [weak self] in self?.makeContextMenu() }
+        contentView = host
+        lookSubscription = Settings.shared.$pinnedLook.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.updateDimming() }
+        }
         styleSubscription = Settings.shared.$tabStyle.combineLatest(Settings.shared.$tabTheme, Settings.shared.$tabSize).sink { [weak self] style, theme, size in
             guard let self else { return }
             self.model.iconOnly = style == .icon
@@ -156,8 +188,36 @@ final class TabBarPanel: NSPanel {
             setFrame(target, display: true)
         }
         if reorder {
-            order(.above, relativeTo: Int(windowID))
+            if isPinned {
+                // Floating level: already above every normal window.
+                orderFrontRegardless()
+            } else {
+                order(.above, relativeTo: Int(windowID))
+            }
         }
+    }
+
+    private func updateDimming() {
+        let dim = isPinned && isCovered && !isHovered && Settings.shared.pinnedLook == .dimmed
+        let alpha = dim ? Self.dimmedAlpha : 1
+        guard alphaValue != alpha else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = isHovered ? 0.12 : 0.25
+            animator().alphaValue = alpha
+        }
+    }
+
+    private func makeContextMenu() -> NSMenu {
+        let menu = NSMenu()
+        let pin = NSMenuItem(title: "Pin Tab Bar on Top", action: #selector(togglePin), keyEquivalent: "")
+        pin.target = self
+        pin.state = isPinned ? .on : .off
+        menu.addItem(pin)
+        return menu
+    }
+
+    @objc private func togglePin() {
+        onTogglePin?()
     }
 
     /// Where a tab is drawn, in AX coordinates, at the active tab's height.
@@ -175,6 +235,38 @@ final class TabBarPanel: NSPanel {
 }
 
 /// Lets the first click on an inactive bar hit the tab instead of only focusing the window.
+/// Also reports the pointer coming and going, and shows the bar's right-click menu: WT is never
+/// the active app, so this tracks always rather than relying on SwiftUI's hover.
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    var onHover: ((Bool) -> Void)?
+    var contextMenu: (() -> NSMenu?)?
+    private var hoverArea: NSTrackingArea?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        if event.trackingArea === hoverArea { onHover?(true) }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        if event.trackingArea === hoverArea { onHover?(false) }
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        if let menu = contextMenu?() {
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        } else {
+            super.rightMouseDown(with: event)
+        }
+    }
 }

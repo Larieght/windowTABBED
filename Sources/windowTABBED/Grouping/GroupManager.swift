@@ -60,6 +60,8 @@ final class GroupManager {
                   self.tearOff == nil else { return }
             self.removeClosedWindows()
             self.checkFullScreen()
+            // Windows can cover a group without focus changing (one dragged over it).
+            self.groups.forEach(self.updateCovered)
         }
     }
 
@@ -110,6 +112,10 @@ final class GroupManager {
             group.bar.model.onDragEnded = { [weak self, weak group] id in
                 guard let self, let group else { return }
                 self.tabDragEnded(id, in: group)
+            }
+            group.bar.onTogglePin = { [weak self, weak group] in
+                guard let self, let group else { return }
+                self.setPinned(!group.bar.isPinned, group)
             }
             groups.append(group)
             watcher.watch(target)
@@ -258,6 +264,23 @@ final class GroupManager {
 
     // MARK: - Tab bar
 
+    /// Pins a group's tab bar on top of other windows, or puts it back just above its window.
+    func setPinned(_ pinned: Bool, _ group: WindowGroup) {
+        group.bar.isPinned = pinned
+        positionBar(of: group)
+        log.notice("\(pinned ? "Pinned" : "Unpinned", privacy: .public) a tab bar")
+    }
+
+    /// A pinned bar notes whether other windows cover its group, so Settings › Pinned tab bars
+    /// can dim it.
+    private func updateCovered(of group: WindowGroup) {
+        guard group.bar.isPinned, !group.isPaused, let active = group.active else {
+            group.bar.isCovered = false
+            return
+        }
+        group.bar.isCovered = WindowDriver.isCovered(active.windowID, in: group.frame.union(group.bar.axFrame))
+    }
+
     func refreshBar(of group: WindowGroup) {
         var windows = group.windows
         // A window pulled out mid-drag keeps its (collapsed) tab until you let go: removing the
@@ -278,6 +301,7 @@ final class GroupManager {
             return
         }
         guard let active = group.active, let frame = active.frame else { return }
+        defer { updateCovered(of: group) }
         if let placement = TabBarPanel.placement(for: frame) {
             shrinkAttempts[active.windowID] = nil
             group.bar.attach(above: active.windowID, frame: frame, placement: placement)

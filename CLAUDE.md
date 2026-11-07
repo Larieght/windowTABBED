@@ -1,7 +1,8 @@
 # windowTABBED
 
 A macOS menu bar app that groups windows from any app into browser-style tabs. Open source under
-the MIT license. Pinning windows on top is planned next. "WT" is shorthand: the app, repo and code
+the MIT license. A group's tab bar can be pinned on top (the bar only: macOS lets only a window's
+own app set its level, so other apps' windows can't be pinned). "WT" is shorthand: the app, repo and code
 all say windowTABBED.
 
 This file is the guide for anyone working on the code, people and AI agents alike. `README.md` is
@@ -63,6 +64,10 @@ with the code.
   app can't answer them, and waiting froze the bar. Adding the pointer's latest movement on top cut
   the lag but made the bar jiggle, so the steady version stays. Linking the bar to the window
   server-side (`SLSAddWindowToWindowMovementGroup`) fails with error 1001 for another app's windows.
+- **A pinned bar is at `.floating` level** and ordered front instead of just above its window.
+  It dims (alpha) while `WindowDriver.isCovered` finds another app's window above the group's
+  active window overlapping it; the 1 s timer rechecks, since a window can cover it with no focus
+  change. Hover is tracked by an `.activeAlways` tracking area, because WT is never the active app.
 - **Raising a window also sets `kAXFrontmost` on its app**: since macOS 14, a background app's
   `activate()` request can be ignored after a click on the non-activating bar.
 - **The grouping key is modifiers only** (⇧ ⌃ ⌥ ⌘ fn), so holding it never types into the app.
@@ -84,7 +89,8 @@ are timing and window-server behavior that only show up live.
   - Settings: `settings`, `style full|icon`, `theme aqua|glass|flat|pill|platinum|retro`,
     `size small|medium|large|extraLarge`, `glyph` (menu bar glyph to `build/glyph.png`), `login on|off` (changes the real login item:
     put it back),
-    `tearoff window|outline|tab`, `record`, `press ctrl,opt`.
+    `tearoff window|outline|tab`, `pinlook dimmed|normal`, `record`, `press ctrl,opt`.
+  - Pinning: `pin` toggles the first group's pin and logs whether it's covered and its alpha.
   - Looks: `themes <bundle id>…` and `preview <bundle id>…` show sample tabs in a real window for
     4 s and log its number, for `screencapture -l` (no one's windows involved).
   - Other: `release` (clears stuck modifiers), `snapshot` (saves the bars and Settings to

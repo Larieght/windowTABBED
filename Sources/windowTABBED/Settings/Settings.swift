@@ -87,6 +87,23 @@ enum TearOffStyle: String, CaseIterable, Identifiable {
     }
 }
 
+/// How a pinned tab bar looks while other windows cover its group (right-click the bar › Pin).
+enum PinnedLook: String, CaseIterable, Identifiable {
+    /// Faded, so it's less in the way over other apps, and full strength under the pointer.
+    case dimmed
+    /// Unchanged.
+    case normal
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .dimmed: "Dimmed"
+        case .normal: "Normal"
+        }
+    }
+}
+
 /// User preferences, saved in UserDefaults.
 final class Settings: ObservableObject {
     static let shared = Settings()
@@ -102,6 +119,7 @@ final class Settings: ObservableObject {
         static let tabTheme = "tabTheme"
         static let tabSize = "tabSize"
         static let experimentalThemes = "showExperimentalThemes"
+        static let pinnedLook = "pinnedLook"
     }
 
     /// No default on purpose: you pick it on first launch (SPEC.md).
@@ -143,6 +161,10 @@ final class Settings: ObservableObject {
         didSet { UserDefaults.standard.set(tearOffStyle.rawValue, forKey: Key.tearOffStyle) }
     }
 
+    @Published var pinnedLook: PinnedLook {
+        didSet { UserDefaults.standard.set(pinnedLook.rawValue, forKey: Key.pinnedLook) }
+    }
+
     private init() {
         let defaults = UserDefaults.standard
         groupingKey = Self.load(forKey: Key.groupingKey) ?? Self.legacyGroupingKey()
@@ -158,6 +180,7 @@ final class Settings: ObservableObject {
         tabTheme = savedTheme.isExperimental && !showExperimental ? .aqua : savedTheme
         tabSize = defaults.string(forKey: Key.tabSize).flatMap(TabSize.init(rawValue:)) ?? .small
         tearOffStyle = defaults.string(forKey: Key.tearOffStyle).flatMap(TearOffStyle.init(rawValue:)) ?? .window
+        pinnedLook = defaults.string(forKey: Key.pinnedLook).flatMap(PinnedLook.init(rawValue:)) ?? .dimmed
     }
 
     /// A recorded combination. A single modifier is one of the presets already; anything else

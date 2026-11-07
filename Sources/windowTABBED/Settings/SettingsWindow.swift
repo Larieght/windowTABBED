@@ -142,10 +142,13 @@ private struct SettingsView: View {
             Text("Tabs")
                 .font(.headline)
             segmentedPicker($settings.tabStyle, label: "Tab style")
+            sizeSlider
+
+            Text("Theme")
+                .font(.headline)
             ThemeGrid(selection: $settings.tabTheme, showExperimental: settings.showExperimentalThemes)
             Toggle("Show experimental themes", isOn: $settings.showExperimentalThemes)
                 .font(.callout)
-            sizeSlider
             if settings.tabTheme == .glass, settings.tabTheme.resolved != .glass {
                 Text("Liquid Glass needs macOS 26. Tabs use Aqua until then.")
                     .font(.caption)
@@ -156,6 +159,14 @@ private struct SettingsView: View {
                 .font(.headline)
             segmentedPicker($settings.tearOffStyle, label: "Dragging a tab out")
             Text(tearOffNote)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Pinned tab bars")
+                .font(.headline)
+            segmentedPicker($settings.pinnedLook, label: "Pinned tab bars")
+            Text("Right-click a tab bar to pin it on top of other windows. This is how it looks while they cover its group.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -343,6 +354,7 @@ protocol PickerOption: CaseIterable, Identifiable, Hashable {
 
 extension TabStyle: PickerOption {}
 extension TearOffStyle: PickerOption {}
+extension PinnedLook: PickerOption {}
 
 /// The themes as a grid of small live previews: each card draws real tabs in that theme. The
 /// chosen card sits on a tinted glass plate that slides across when you pick another (macOS 26+;

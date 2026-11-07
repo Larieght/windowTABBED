@@ -1,7 +1,7 @@
 # windowTABBED — v1 spec (tabbing only)
 
 macOS menu bar app. Swift + AppKit (SwiftUI for the tab bar view).
-Groups windows from any app into browser-style tabs. Pinning comes after v1.
+Groups windows from any app into browser-style tabs, and can pin a group's tab bar on top.
 
 Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 
@@ -30,6 +30,17 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 - Dragging empty space on the bar does **nothing**. Move the group with the active window's title bar.
 - When a group is down to **one window**, the group dissolves and the bar disappears.
 - Tab switching shortcuts (Ctrl+Option+←/→) exist but are **off by default**.
+
+## Pinned tab bars
+
+- Right-click a tab bar › **Pin Tab Bar on Top** (a checkmark shows it's on; pick it again to unpin).
+  Pinning is per group and lasts until you unpin it or the group dissolves.
+- A pinned bar floats above every normal window, so the group's tabs stay reachable while other
+  windows cover it. Clicking a tab brings that window to the front as usual.
+- Only the bar is pinned, never the windows: macOS lets only the app that owns a window keep it on top.
+- Settings › Pinned tab bars sets how a pinned bar looks while another window covers its group:
+  **Dimmed** (default: faded, full strength under the pointer) or **Normal**.
+- An unpinned bar sits just above its window, so other windows cover it normally.
 
 ## Keeping the group in sync
 

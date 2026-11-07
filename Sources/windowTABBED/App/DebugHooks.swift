@@ -47,6 +47,11 @@ final class DebugHooks {
             let window = group.windows[n]
             window.setPosition(CGPoint(x: Double(parts[2]) ?? 0, y: Double(parts[3]) ?? 0))
             log.notice("debug: \(window.description, privacy: .public) now at \(String(describing: window.frame), privacy: .public)")
+        case ("pin", _, let group?):
+            groups.setPinned(!group.bar.isPinned, group)
+            log.notice("debug: pinned \(group.bar.isPinned, privacy: .public) covered \(group.bar.isCovered, privacy: .public) alpha \(group.bar.alphaValue, privacy: .public)")
+        case ("pinlook", _, _) where parts.count == 2:
+            Settings.shared.pinnedLook = PinnedLook(rawValue: String(parts[1])) ?? .dimmed
         case ("menu", _, _):
             let titles = (NSApp.delegate as? AppDelegate)?.currentMenuTitles() ?? []
             log.notice("debug: menu \(titles.joined(separator: " | "), privacy: .public)")

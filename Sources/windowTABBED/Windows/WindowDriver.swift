@@ -188,6 +188,17 @@ enum WindowDriver {
         return CGRect(dictionaryRepresentation: bounds as CFDictionary)
     }
 
+    /// True if another app's normal window above `id` overlaps `area` (AX coordinates).
+    static func isCovered(_ id: CGWindowID, in area: CGRect) -> Bool {
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        // Front to back: everything before `id` is above it.
+        for info in windowInfo(onScreenOnly: true) {
+            if info.id == id { return false }
+            if info.isNormalLayer, info.pid != ownPID, info.bounds.intersects(area) { return true }
+        }
+        return false
+    }
+
     private struct WindowInfo {
         let id: CGWindowID
         let layer: Int
