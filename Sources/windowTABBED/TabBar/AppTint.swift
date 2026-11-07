@@ -17,7 +17,7 @@ enum AppTint {
     }
 
     /// Average of the icon's colorful pixels, toned down so white text stays readable on it.
-    private static func dominantColor(of icon: NSImage) -> NSColor? {
+    static func dominantColor(of icon: NSImage) -> NSColor? {
         let size = 16
         guard let bitmap = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8,

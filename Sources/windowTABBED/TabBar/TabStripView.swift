@@ -85,10 +85,14 @@ struct TabFace: View {
             Image(nsImage: tab.icon ?? NSImage())
                 .resizable()
                 .frame(width: 16, height: 16)
+                // The tab takes its color from this icon, so the icon's edge needs a little
+                // shadow to stand out from it (an all-orange icon on an orange tab vanished).
+                .shadow(color: .black.opacity(isActive ? 0.55 : 0.35), radius: 1, y: 0.5)
                 .opacity(isActive ? 1 : 0.5)
             if !iconOnly {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    // Weight marks the active tab as well as color: semibold, the others regular.
+                    .font(.system(size: 13, weight: isActive ? .semibold : .regular))
                     .foregroundStyle(.white.opacity(isActive ? 1 : 0.45))
                     .lineLimit(1)
                     .truncationMode(.tail)

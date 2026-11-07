@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import SwiftUI
 
 /// Debug builds only: lets scripts drive the tab bars, since UI-testing tools can't click
 /// a menu bar app's own windows. Trigger with scripts/debug.swift.
@@ -9,6 +10,7 @@ import AppKit
 ///   move <n> <m>    drag tab n to position m
 ///   dragout <n>     drag tab n out of the bar, dropping it at the pointer
 ///   tearoff window|outline|tab   how a tab dragged out of the bar looks
+///   preview <bundle id>…   show an active and a background tab for each app for 4 s (logs the window number)
 ///   snapshot        save each bar as build/tabbar-<k>.png (and the Settings window, if open)
 ///   keydrag x1 y1 x2 y2   real mouse drag (AX points) with the grouping key held
 final class DebugHooks {
@@ -56,6 +58,8 @@ final class DebugHooks {
             press(String(parts[1]))
         case ("release", _, _):
             Self.releaseModifiers()
+        case ("preview", _, _) where parts.count >= 2:
+            MainActor.assumeIsolated { preview(parts.dropFirst().map(String.init)) }
         case ("snapshot", _, _):
             snapshot()
         case ("keydrag", _, _) where parts.count == 5:
@@ -71,6 +75,44 @@ final class DebugHooks {
             return
         }
         log.notice("debug: ran \(command, privacy: .public)")
+    }
+
+    /// Tabs for apps you may not have windows of, without touching anyone's windows.
+    private var previewPanel: NSPanel?
+
+    @MainActor private func preview(_ bundleIDs: [String]) {
+        let rows = bundleIDs.compactMap { id -> (TabBarModel.Tab, TabBarModel.Tab)? in
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
+            let icon = NSWorkspace.shared.icon(forFile: url.path)
+            let tint = AppTint.dominantColor(of: icon) ?? AppTint.fallback
+            let name = url.deletingPathExtension().lastPathComponent
+            return (TabBarModel.Tab(id: 1, title: name, icon: icon, tint: tint),
+                    TabBarModel.Tab(id: 2, title: name, icon: icon, tint: tint))
+        }
+        let view = VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .bottom, spacing: TabBarPanel.tabSpacing) {
+                    TabFace(tab: row.0, isActive: true, flipped: false, iconOnly: false, width: 184)
+                    TabFace(tab: row.1, isActive: false, flipped: false, iconOnly: false, width: 184)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color(white: 0.15))
+        // Shown for real for a few seconds, so `screencapture -l` sees exactly what the bar draws.
+        let hosting = NSHostingView(rootView: view)
+        let size = hosting.fittingSize
+        let panel = NSPanel(contentRect: ScreenGeometry.appKitRect(fromAX: CGRect(x: 20, y: 900, width: size.width, height: size.height)),
+                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.contentView = hosting
+        panel.isReleasedWhenClosed = false
+        panel.orderFrontRegardless()
+        previewPanel = panel
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            self?.previewPanel?.orderOut(nil)
+            self?.previewPanel = nil
+        }
+        log.notice("debug: preview window \(panel.windowNumber, privacy: .public)")
     }
 
     private func snapshot() {
