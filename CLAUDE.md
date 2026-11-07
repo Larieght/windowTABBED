@@ -23,7 +23,7 @@ with the code.
   deployment target (14.0) as the SDK, and macOS then shows the app in the pre-26 compatibility
   look: old title bar and traffic lights, and glass controls drawn as their older fallback.
 - `build.sh` also stamps the commit into Info.plist (`WTCommit`, `-dirty` with uncommitted changes)
-  and the config (`WTBuildConfig`). The menu header shows them: `windowTABBED 1.1.0 (5b945aa, debug)`.
+  and the config (`WTBuildConfig`). The menu header shows them: `windowTABBED 1.1.2 (5b945aa, debug)`.
   Bug reports should include that line, so you know which build is running.
 - App icon: `Resources/AppIcon.icns`, built by `scripts/make-icon.sh` from
   `Resources/Icon/AppIcon-1024.png` (design "08g", from the maintainer's Figma file). To change
