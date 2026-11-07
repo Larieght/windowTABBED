@@ -20,7 +20,13 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 - Only the tabs animate: fast, slightly bouncy spring. Active tab rises, old one sinks.
 - **×** removes the window from the group. It never closes the real window.
 - Drag a tab **out** of the bar and drop it on the desktop → it leaves the group and lands where dropped.
-- Drag tabs within the bar to reorder.
+  - Pulling a tab up or down stretches it with resistance (rubber band); about 24 pt out it comes loose
+    and follows the pointer. Dropping it back over the bar puts it back.
+  - Settings › Dragging a tab out picks what follows the pointer once it's loose:
+    **Window** (default: the real window leaves the group right away and follows, with the tab on top),
+    **Outline** (a floating tab and a dashed outline where the window will land) or
+    **Tab** (just the floating tab). With Outline and Tab, the window moves when you let go.
+- Drag tabs within the bar to reorder. The other tabs slide aside as the dragged one passes their middle, and it glides into its slot when you let go.
 - Dragging empty space on the bar does **nothing**. Move the group with the active window's title bar.
 - When a group is down to **one window**, the group dissolves and the bar disappears.
 - Tab switching shortcuts (Ctrl+Option+←/→) exist but are **off by default**.

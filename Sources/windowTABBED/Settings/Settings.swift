@@ -67,6 +67,26 @@ enum TabStyle: String, CaseIterable, Identifiable {
     }
 }
 
+/// What follows the pointer when you pull a tab out of the bar (Grouping/TearOff.swift).
+enum TearOffStyle: String, CaseIterable, Identifiable {
+    /// The real window leaves the group and follows the pointer.
+    case window
+    /// A floating tab, plus a dashed outline where the window will land.
+    case outline
+    /// Just a floating tab. The window moves when you let go.
+    case tab
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .window: "Window"
+        case .outline: "Outline"
+        case .tab: "Tab"
+        }
+    }
+}
+
 /// User preferences, saved in UserDefaults.
 final class Settings: ObservableObject {
     static let shared = Settings()
@@ -78,6 +98,7 @@ final class Settings: ObservableObject {
         static let legacyGroupingKey = "groupingKey"
         static let tabShortcuts = "tabShortcutsEnabled"
         static let tabStyle = "tabStyle"
+        static let tearOffStyle = "tearOffStyle"
     }
 
     /// No default on purpose: you pick it on first launch (SPEC.md).
@@ -99,12 +120,17 @@ final class Settings: ObservableObject {
         didSet { UserDefaults.standard.set(tabStyle.rawValue, forKey: Key.tabStyle) }
     }
 
+    @Published var tearOffStyle: TearOffStyle {
+        didSet { UserDefaults.standard.set(tearOffStyle.rawValue, forKey: Key.tearOffStyle) }
+    }
+
     private init() {
         let defaults = UserDefaults.standard
         groupingKey = Self.load(forKey: Key.groupingKey) ?? Self.legacyGroupingKey()
         customGroupingKey = Self.load(forKey: Key.customGroupingKey)
         tabShortcutsEnabled = defaults.bool(forKey: Key.tabShortcuts)
         tabStyle = defaults.string(forKey: Key.tabStyle).flatMap(TabStyle.init(rawValue:)) ?? .full
+        tearOffStyle = defaults.string(forKey: Key.tearOffStyle).flatMap(TearOffStyle.init(rawValue:)) ?? .window
     }
 
     /// A recorded combination. A single modifier is one of the presets already; anything else

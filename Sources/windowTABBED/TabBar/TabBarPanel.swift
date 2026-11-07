@@ -18,6 +18,14 @@ final class TabBarModel: ObservableObject {
     @Published var tabWidth: CGFloat = TabBarPanel.maxTabWidth
     /// Settings › Tabs › Icon only: tabs show just the app icon (and × on the active one).
     @Published var iconOnly = false
+    /// The tab being dragged: the drag overlay draws it, so the bar's copy is hidden.
+    @Published var draggingID: CGWindowID?
+    /// A tab whose window was pulled out mid-drag (Window style): kept so its drag gesture
+    /// lives on, but drawn with no width.
+    @Published var collapsedID: CGWindowID?
+
+    /// Tabs that take up room in the bar.
+    var visibleCount: Int { tabs.filter { $0.id != collapsedID }.count }
 
     /// How wide a tab is drawn.
     func width(isActive: Bool) -> CGFloat {
@@ -29,8 +37,11 @@ final class TabBarModel: ObservableObject {
     var onClose: ((CGWindowID) -> Void)?
     /// Tab dragged sideways to a new position.
     var onMove: ((CGWindowID, Int) -> Void)?
-    /// Tab dragged up or down out of the bar and let go.
+    /// Tab dragged up or down out of the bar and let go (debug hook).
     var onDragOut: ((CGWindowID) -> Void)?
+    /// A tab drag moved, or the button went up. GroupManager reads the pointer itself.
+    var onDragChanged: ((CGWindowID) -> Void)?
+    var onDragEnded: ((CGWindowID) -> Void)?
 }
 
 /// The tab strip window. One per group, owned by windowTABBED, ordered directly above the
@@ -49,6 +60,8 @@ final class TabBarPanel: NSPanel {
     let model = TabBarModel()
     /// Where the bar was last put, so a change of tab style can lay it out again right away.
     private var lastAttach: (windowID: CGWindowID, frame: CGRect, placement: Placement)?
+    /// Where the bar is, in AX coordinates.
+    private(set) var axFrame: CGRect = .zero
     private var styleSubscription: AnyCancellable?
 
     init() {
@@ -103,7 +116,7 @@ final class TabBarPanel: NSPanel {
         let flipped = placement == .below
         if model.flipped != flipped { model.flipped = flipped }
 
-        let count = CGFloat(max(model.tabs.count, 1))
+        let count = CGFloat(max(model.visibleCount, 1))
         let available = max(frame.width - Self.inset * 2, Self.minTabWidth)
         let spacing = Self.tabSpacing * (count - 1)
         let tabWidth = min(Self.maxTabWidth, max(Self.minTabWidth, (available - spacing) / count))
@@ -118,6 +131,7 @@ final class TabBarPanel: NSPanel {
             ? Self.iconTabWidth * (count - 1) + Self.iconActiveTabWidth + spacing
             : tabWidth * count + spacing
         let barFrame = CGRect(x: frame.minX + Self.inset, y: y, width: min(available, tabsWidth), height: height)
+        axFrame = barFrame
         let target = ScreenGeometry.appKitRect(fromAX: barFrame)
         if target.size == self.frame.size {
             // Only moving: no relayout or redraw.
@@ -128,6 +142,19 @@ final class TabBarPanel: NSPanel {
         if reorder {
             order(.above, relativeTo: Int(windowID))
         }
+    }
+
+    /// Where a tab is drawn, in AX coordinates, at the active tab's height.
+    func tabFrame(of id: CGWindowID) -> CGRect? {
+        guard model.tabs.contains(where: { $0.id == id }) else { return nil }
+        var x = axFrame.minX
+        for tab in model.tabs where tab.id != model.collapsedID {
+            if tab.id == id { break }
+            x += model.width(isActive: tab.id == model.activeID) + Self.tabSpacing
+        }
+        let height = TabFace.activeHeight
+        let y = model.flipped ? axFrame.minY : axFrame.maxY - height
+        return CGRect(x: x, y: y, width: model.width(isActive: id == model.activeID), height: height)
     }
 }
 

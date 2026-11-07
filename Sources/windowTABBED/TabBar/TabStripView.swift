@@ -5,65 +5,77 @@ struct TabStripView: View {
     @ObservedObject var model: TabBarModel
 
     /// Fast with a small bounce, matching the Figma prototype's spring.
-    private static let spring = Animation.interpolatingSpring(mass: 1, stiffness: 700, damping: 18)
+    static let spring = Animation.interpolatingSpring(mass: 1, stiffness: 700, damping: 18)
 
     var body: some View {
         HStack(alignment: model.flipped ? .top : .bottom, spacing: TabBarPanel.tabSpacing) {
             ForEach(model.tabs) { tab in
+                let isActive = tab.id == model.activeID
+                let collapsed = tab.id == model.collapsedID
                 TabChip(
                     tab: tab,
-                    isActive: tab.id == model.activeID,
+                    isActive: isActive,
                     flipped: model.flipped,
                     iconOnly: model.iconOnly,
-                    width: model.width(isActive: tab.id == model.activeID),
+                    width: collapsed ? 0 : model.width(isActive: isActive),
+                    hidden: tab.id == model.draggingID,
                     onSelect: { model.onSelect?(tab.id) },
                     onClose: { model.onClose?(tab.id) },
-                    onDragEnd: { translation in dragEnded(tab.id, translation) }
+                    onDragChanged: { model.onDragChanged?(tab.id) },
+                    onDragEnded: { model.onDragEnded?(tab.id) }
                 )
+                // A tab whose window was pulled out of the group keeps its (empty) place, so
+                // its drag gesture lives on, but takes no room.
+                .padding(.trailing, collapsed ? -TabBarPanel.tabSpacing : 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.flipped ? .topLeading : .bottomLeading)
         .animation(Self.spring, value: model.activeID)
         .animation(Self.spring, value: model.tabs.map(\.id))
         .animation(Self.spring, value: model.iconOnly)
-    }
-
-    /// Out of the bar (up or down) detaches the window; sideways reorders.
-    private func dragEnded(_ id: CGWindowID, _ translation: CGSize) {
-        if abs(translation.height) > TabChip.dragOutDistance {
-            model.onDragOut?(id)
-            return
-        }
-        guard let from = model.tabs.firstIndex(where: { $0.id == id }) else { return }
-        let step = model.width(isActive: false) + TabBarPanel.tabSpacing
-        let to = from + Int((translation.width / step).rounded())
-        if to != from {
-            model.onMove?(id, to)
-        }
+        .animation(Self.spring, value: model.collapsedID)
     }
 }
 
-/// One tab: app icon + short title (or just the icon). Active = taller, full tint, gloss and ×.
-/// Background = short, dim, grey.
+/// One tab in the bar: the drawing (TabFace) plus clicks and drags. While it's being dragged,
+/// the bar's copy is hidden and the drag overlay draws it under the pointer (TearOff.swift).
 private struct TabChip: View {
     let tab: TabBarModel.Tab
     let isActive: Bool
     let flipped: Bool
     let iconOnly: Bool
     let width: CGFloat
+    let hidden: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
-    let onDragEnd: (CGSize) -> Void
+    let onDragChanged: () -> Void
+    let onDragEnded: () -> Void
 
-    /// How far up or down a tab has to be pulled to come out of the bar.
-    static let dragOutDistance: CGFloat = 24
+    var body: some View {
+        TabFace(tab: tab, isActive: isActive, flipped: flipped, iconOnly: iconOnly, width: width, onClose: onClose)
+            .opacity(hidden ? 0 : 1)
+            .onTapGesture(perform: onSelect)
+            .gesture(
+                // Global coordinates, and the pointer position is read from AppKit anyway: the
+                // tab can shrink to nothing mid-drag, which would shift a local coordinate space.
+                DragGesture(minimumDistance: 4, coordinateSpace: .global)
+                    .onChanged { _ in onDragChanged() }
+                    .onEnded { _ in onDragEnded() })
+    }
+}
 
-    // @GestureState rather than @State: it resets on release, and @State needs a compiler
-    // plugin that only ships with full Xcode, not the command-line tools.
-    @GestureState private var dragOffset: CGSize = .zero
+/// How a tab looks: app icon + short title (or just the icon). Active = taller, full tint, gloss
+/// and ×. Background = short, dim, grey. Used by the bar and by the drag overlay.
+struct TabFace: View {
+    let tab: TabBarModel.Tab
+    let isActive: Bool
+    let flipped: Bool
+    let iconOnly: Bool
+    let width: CGFloat
+    var onClose: (() -> Void)?
 
-    private static let activeHeight: CGFloat = 30
-    private static let inactiveHeight: CGFloat = 26
+    static let activeHeight: CGFloat = 30
+    static let inactiveHeight: CGFloat = 26
     private static let radius: CGFloat = 8
     /// Background tabs keep only a hint of their app's color.
     private static let neutral = NSColor(srgbRed: 0.173, green: 0.180, blue: 0.208, alpha: 1)
@@ -83,7 +95,7 @@ private struct TabChip: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if isActive {
-                Button(action: onClose) {
+                Button(action: { onClose?() }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white.opacity(0.7))
@@ -101,15 +113,6 @@ private struct TabChip: View {
         .clipShape(shape)
         .contentShape(shape)
         .help(iconOnly ? title : "")
-        // Follows the pointer sideways; fades once it's far enough up or down to come out.
-        .offset(x: dragOffset.width)
-        .opacity(abs(dragOffset.height) > Self.dragOutDistance ? 0.5 : 1)
-        .zIndex(dragOffset == .zero ? 0 : 1)
-        .onTapGesture(perform: onSelect)
-        .gesture(
-            DragGesture(minimumDistance: 4)
-                .updating($dragOffset) { value, offset, _ in offset = value.translation }
-                .onEnded { onDragEnd($0.translation) })
     }
 
     private var title: String { tab.title.isEmpty ? "Untitled" : tab.title }

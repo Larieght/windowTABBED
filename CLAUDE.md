@@ -42,7 +42,8 @@ with the code.
   `ScreenGeometry` converts coordinates: AX uses a top-left origin, AppKit bottom-left.
 - `Grouping/`: `GroupManager` is the source of truth and applies `SPEC.md`. `DragWatcher` watches
   global mouse drags for grouping-key drops, and keeps the bar on a dragged window.
-  `Parking` decides where background tabs hide.
+  `Parking` decides where background tabs hide. `TearOff` pulls a tab out of its bar: a
+  click-through `DragOverlay` window draws the dragged tab, since the bar itself is only 30 pt tall.
 - `TabBar/`: the tab strip, one borderless non-activating `NSPanel` per group, ordered just above
   the group's active window. SwiftUI tabs, tinted by the app icon's color (`AppTint`).
 - `Settings/`: preferences (`Settings`), the Settings window with its key recorder, and the

@@ -28,7 +28,7 @@ final class WindowGroup {
 /// The source of truth for all groups. Applies the rules in SPEC.md.
 final class GroupManager {
     private(set) var groups: [WindowGroup] = []
-    private let watcher = WindowWatcher()
+    let watcher = WindowWatcher()
     /// A window being carried with the grouping key held: its group doesn't follow it.
     private var syncPausedID: CGWindowID?
     /// A group's active window you're dragging normally. Its bar follows the window server
@@ -39,6 +39,11 @@ final class GroupManager {
     private var shrinkAttempts: [CGWindowID: Int] = [:]
     private var pendingShrinks: [CGWindowID: DispatchWorkItem] = [:]
     private static let maxShrinkAttempts = 3
+
+    /// A tab being pulled out of its bar (TearOff.swift).
+    var tearOff: TearOffSession?
+    let overlay = DragOverlay()
+    let mover = WindowMover()
 
     /// Offset for a window that leaves its group with ×, so it doesn't vanish behind the group.
     private static let detachOffset: CGFloat = 30
@@ -51,7 +56,8 @@ final class GroupManager {
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             // Not mid-drag: the full screen check asks the app through Accessibility, and an app
             // whose window is being dragged can't answer, which froze the bar for half a second.
-            guard let self, !self.groups.isEmpty, self.draggingID == nil, self.syncPausedID == nil else { return }
+            guard let self, !self.groups.isEmpty, self.draggingID == nil, self.syncPausedID == nil,
+                  self.tearOff == nil else { return }
             self.removeClosedWindows()
             self.checkFullScreen()
         }
@@ -94,7 +100,16 @@ final class GroupManager {
             }
             group.bar.model.onDragOut = { [weak self, weak group] id in
                 guard let self, let group else { return }
-                self.dragOut(id, from: group, to: ScreenGeometry.mouseLocation)
+                let point = ScreenGeometry.mouseLocation
+                self.dragOut(id, from: group, to: CGRect(origin: CGPoint(x: point.x - 60, y: point.y - 12), size: group.frame.size))
+            }
+            group.bar.model.onDragChanged = { [weak self, weak group] id in
+                guard let self, let group else { return }
+                self.tabDragChanged(id, in: group)
+            }
+            group.bar.model.onDragEnded = { [weak self, weak group] id in
+                guard let self, let group else { return }
+                self.tabDragEnded(id, in: group)
             }
             groups.append(group)
             watcher.watch(target)
@@ -173,13 +188,12 @@ final class GroupManager {
         refreshBar(of: group)
     }
 
-    /// A tab dragged out of the bar: the window leaves the group and lands at `point`,
-    /// with the pointer on its title bar as if you'd been carrying it there.
-    func dragOut(_ id: CGWindowID, from group: WindowGroup, to point: CGPoint) {
+    /// A tab dragged out of the bar: the window leaves the group and lands at `frame`.
+    func dragOut(_ id: CGWindowID, from group: WindowGroup, to frame: CGRect) {
         guard let window = group.windows.first(where: { $0.windowID == id }) else { return }
         remove(id, from: group, detach: false)
         // A parked tab may still have an old size: give it the group's.
-        window.setFrame(CGRect(origin: CGPoint(x: point.x - 60, y: point.y - 12), size: group.frame.size))
+        window.setFrame(frame)
         window.raise()
     }
 
@@ -244,8 +258,14 @@ final class GroupManager {
 
     // MARK: - Tab bar
 
-    private func refreshBar(of group: WindowGroup) {
-        group.bar.model.tabs = group.windows.map { window in
+    func refreshBar(of group: WindowGroup) {
+        var windows = group.windows
+        // A window pulled out mid-drag keeps its (collapsed) tab until you let go: removing the
+        // tab would end the drag gesture.
+        if let session = tearOff, session.isDetached, session.group === group {
+            windows.insert(session.window, at: min(session.index, windows.count))
+        }
+        group.bar.model.tabs = windows.map { window in
             TabBarModel.Tab(id: window.windowID, title: window.title, icon: window.appIcon, tint: AppTint.color(for: window.app))
         }
         group.bar.model.activeID = group.activeID

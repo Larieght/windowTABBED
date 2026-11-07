@@ -19,7 +19,8 @@ apps. Hold a key, drag one window onto another, and they share a tab bar. Click 
 - **Your choice of grouping key.** ⇧, ⌃, ⌥, ⌘ or fn, or record your own combination.
 - **Tabs that stay in sync.** Moving or resizing the active window moves the whole group.
   Minimize one and the group minimizes, go full screen and the bar steps aside.
-- **Drag tabs** to reorder them, or drag one out of the bar to pull it out of the group.
+- **Drag tabs** to reorder them, or pull one out of the bar to take it out of the group. Choose what
+  follows your pointer: the window itself, an outline of where it will land, or just the tab.
 - **Smart placement.** The bar sits above the window, or flips below it when there's no room.
 - **Icon-only tabs** if you prefer a compact bar.
 - **Keyboard shortcuts** (⌃⌥← / ⌃⌥→) to switch tabs, off by default.

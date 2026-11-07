@@ -139,7 +139,15 @@ private struct SettingsView: View {
 
             Text("Tabs")
                 .font(.headline)
-            tabStylePicker
+            segmentedPicker($settings.tabStyle, label: "Tab style")
+
+            Text("Dragging a tab out")
+                .font(.headline)
+            segmentedPicker($settings.tearOffStyle, label: "Dragging a tab out")
+            Text(tearOffNote)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Divider()
 
@@ -159,14 +167,22 @@ private struct SettingsView: View {
         .frame(width: 400)
     }
 
+    private var tearOffNote: String {
+        switch settings.tearOffStyle {
+        case .window: "The window itself follows the pointer. Bring it back over the bar to undo."
+        case .outline: "A floating tab and an outline of where the window will land."
+        case .tab: "Just a floating tab. The window moves when you let go."
+        }
+    }
+
     /// On macOS 26+, a Liquid Glass segmented control. Earlier systems keep the standard one.
-    @ViewBuilder private var tabStylePicker: some View {
+    @ViewBuilder private func segmentedPicker<Option: PickerOption>(_ selection: Binding<Option>, label: String) -> some View {
         if #available(macOS 26, *) {
-            GlassSegmentedPicker(selection: $settings.tabStyle)
+            GlassSegmentedPicker(selection: selection)
         } else {
-            Picker("Tab style", selection: $settings.tabStyle) {
-                ForEach(TabStyle.allCases) { style in
-                    Text(style.label).tag(style)
+            Picker(label, selection: selection) {
+                ForEach(Array(Option.allCases)) { option in
+                    Text(option.label).tag(option)
                 }
             }
             .pickerStyle(.segmented)
@@ -200,15 +216,15 @@ private extension View {
 /// One glass capsule holding both tab styles. The chosen one sits on a tinted glass pill
 /// that springs across when you pick the other.
 @available(macOS 26, *)
-private struct GlassSegmentedPicker: View {
-    @Binding var selection: TabStyle
+private struct GlassSegmentedPicker<Option: PickerOption>: View {
+    @Binding var selection: Option
     @Namespace private var thumb
 
-    private static let spring = Animation.spring(response: 0.32, dampingFraction: 0.72)
+    private static var spring: Animation { .spring(response: 0.32, dampingFraction: 0.72) }
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(TabStyle.allCases) { style in
+            ForEach(Array(Option.allCases)) { style in
                 let isSelected = selection == style
                 Text(style.label)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
@@ -234,3 +250,11 @@ private struct GlassSegmentedPicker: View {
         .animation(Self.spring, value: selection)
     }
 }
+
+/// A choice shown as one segment of a picker.
+protocol PickerOption: CaseIterable, Identifiable, Hashable {
+    var label: String { get }
+}
+
+extension TabStyle: PickerOption {}
+extension TearOffStyle: PickerOption {}

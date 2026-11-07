@@ -8,6 +8,7 @@ import AppKit
 ///   close <n>       click × on tab n of the first group
 ///   move <n> <m>    drag tab n to position m
 ///   dragout <n>     drag tab n out of the bar, dropping it at the pointer
+///   tearoff window|outline|tab   how a tab dragged out of the bar looks
 ///   snapshot        save each bar as build/tabbar-<k>.png (and the Settings window, if open)
 ///   keydrag x1 y1 x2 y2   real mouse drag (AX points) with the grouping key held
 final class DebugHooks {
@@ -47,6 +48,8 @@ final class DebugHooks {
             SettingsWindow.shared.show()
         case ("style", _, _) where parts.count == 2:
             Settings.shared.tabStyle = TabStyle(rawValue: String(parts[1])) ?? .full
+        case ("tearoff", _, _) where parts.count == 2:
+            Settings.shared.tearOffStyle = TearOffStyle(rawValue: String(parts[1])) ?? .window
         case ("record", _, _):
             SettingsWindow.shared.recorder.start(onRecord: Settings.shared.useRecorded)
         case ("press", _, _) where parts.count == 2:
