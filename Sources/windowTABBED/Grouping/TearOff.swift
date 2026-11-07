@@ -94,7 +94,7 @@ extension GroupManager {
     /// The other tabs slide aside as the dragged one passes their middle, like browser tabs.
     private func reorderLive(_ session: TearOffSession, in group: WindowGroup) {
         let model = group.bar.model
-        let step = model.width(isActive: false) + TabBarPanel.tabSpacing
+        let step = model.width(isActive: false) + model.spacing
         let offset = session.chip.midX - group.bar.axFrame.minX
         let target = min(max(Int(offset / step), 0), group.windows.count - 1)
         guard target != session.index else { return }
@@ -226,7 +226,9 @@ extension GroupManager {
             outline: session.isLoose && session.style == .outline ? landing : nil,
             lift: lift,
             flipped: group.bar.model.flipped && !session.isLoose,
-            iconOnly: group.bar.model.iconOnly)
+            iconOnly: group.bar.model.iconOnly,
+            theme: group.bar.model.theme,
+            scale: group.bar.model.scale)
         if session.isDetached {
             mover.move(session.window, to: landing.origin)
         }
@@ -275,6 +277,8 @@ final class DragOverlayModel: ObservableObject {
     @Published var lift: CGFloat = 0
     @Published var flipped = false
     @Published var iconOnly = false
+    @Published var theme: TabTheme = .aqua
+    @Published var scale: CGFloat = 1
 }
 
 /// A click-through window over the display, above other windows, that draws a dragged tab.
@@ -299,7 +303,7 @@ final class DragOverlay: NSPanel {
     override var canBecomeMain: Bool { false }
 
     /// All rects in AX coordinates.
-    func show(tab: TabBarModel.Tab?, isActive: Bool, chip: CGRect, outline: CGRect?, lift: CGFloat, flipped: Bool, iconOnly: Bool) {
+    func show(tab: TabBarModel.Tab?, isActive: Bool, chip: CGRect, outline: CGRect?, lift: CGFloat, flipped: Bool, iconOnly: Bool, theme: TabTheme, scale: CGFloat) {
         let screen = ScreenGeometry.screenFrame(containing: chip)
         if screen != screenFrame {
             screenFrame = screen
@@ -313,6 +317,8 @@ final class DragOverlay: NSPanel {
         if model.isActive != isActive { model.isActive = isActive }
         if model.flipped != flipped { model.flipped = flipped }
         if model.iconOnly != iconOnly { model.iconOnly = iconOnly }
+        if model.theme != theme { model.theme = theme }
+        if model.scale != scale { model.scale = scale }
         if !isVisible { orderFrontRegardless() }
     }
 
@@ -340,7 +346,7 @@ private struct DragOverlayView: View {
             if let tab = model.tab {
                 // Bottom-aligned in the chip's frame like in the bar (top when flipped), since a
                 // background tab is shorter than the active one.
-                TabFace(tab: tab, isActive: model.isActive, flipped: model.flipped, iconOnly: model.iconOnly, width: model.chip.width)
+                TabFace(tab: tab, isActive: model.isActive, flipped: model.flipped, iconOnly: model.iconOnly, width: model.chip.width, theme: model.theme, scale: model.scale)
                     .frame(height: model.chip.height, alignment: model.flipped ? .top : .bottom)
                     .shadow(color: .black.opacity(0.35 * model.lift), radius: 8 * model.lift, y: 3 * model.lift)
                     .scaleEffect(1 + 0.04 * model.lift)

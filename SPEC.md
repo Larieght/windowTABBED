@@ -40,6 +40,24 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 - Full screen (green button) **pauses** the group: the bar hides, and comes back on exit.
 - A window that closes, or whose app quits, is removed from its group.
 
+## Themes
+
+- Settings › Tabs › Theme: **Aqua** (default), **Liquid Glass** (macOS 26+; Aqua on older systems),
+  **Flat**, **Pill**, **Metallic**, **Retro 98**, picked from a grid of live previews. Changing it
+  redraws every bar right away.
+- Flat, Pill and Metallic are **experimental**: hidden unless "Show experimental themes" is on (off
+  by default), then shown together as the grid's second row, tagged. Turning it off while using one
+  switches to Aqua.
+- Settings › Tabs › Size: **Small** (default, the original size), **Medium**, **Large**,
+  **Extra Large** on a slider. Everything in the bar scales with it: height, tab widths, text, icons.
+
+## Settings › General and About
+
+- **Open windowTABBED at login**, off by default. macOS keeps this (Login Items), so Settings reads it
+  back from there; if macOS wants your OK first, Settings links to Login Items.
+- **About**: version and build, links to the GitHub page, its Releases (to check for updates) and a
+  new issue, and the copyright line.
+
 ## Tab bar placement
 
 1. Above the window (default).

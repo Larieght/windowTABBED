@@ -22,8 +22,10 @@ apps. Hold a key, drag one window onto another, and they share a tab bar. Click 
 - **Drag tabs** to reorder them, or pull one out of the bar to take it out of the group. Choose what
   follows your pointer: the window itself, an outline of where it will land, or just the tab.
 - **Smart placement.** The bar sits above the window, or flips below it when there's no room.
-- **Icon-only tabs** if you prefer a compact bar.
+- **Themes**: Aqua, Liquid Glass and Retro 98, plus experimental Flat, Pill and Metallic.
+- **Four sizes**, from Small to Extra Large, and **icon-only tabs** if you prefer a compact bar.
 - **Keyboard shortcuts** (⌃⌥← / ⌃⌥→) to switch tabs, off by default.
+- **Opens at login** if you like (Settings › General).
 - **Private.** No network access, no analytics, nothing leaves your Mac.
 
 ## Requirements

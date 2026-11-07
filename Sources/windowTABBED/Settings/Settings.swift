@@ -99,6 +99,9 @@ final class Settings: ObservableObject {
         static let tabShortcuts = "tabShortcutsEnabled"
         static let tabStyle = "tabStyle"
         static let tearOffStyle = "tearOffStyle"
+        static let tabTheme = "tabTheme"
+        static let tabSize = "tabSize"
+        static let experimentalThemes = "showExperimentalThemes"
     }
 
     /// No default on purpose: you pick it on first launch (SPEC.md).
@@ -120,6 +123,22 @@ final class Settings: ObservableObject {
         didSet { UserDefaults.standard.set(tabStyle.rawValue, forKey: Key.tabStyle) }
     }
 
+    @Published var tabTheme: TabTheme {
+        didSet { UserDefaults.standard.set(tabTheme.rawValue, forKey: Key.tabTheme) }
+    }
+
+    /// Offers the experimental themes in Settings. Turning it off while using one goes back to Aqua.
+    @Published var showExperimentalThemes: Bool {
+        didSet {
+            UserDefaults.standard.set(showExperimentalThemes, forKey: Key.experimentalThemes)
+            if !showExperimentalThemes, tabTheme.isExperimental { tabTheme = .aqua }
+        }
+    }
+
+    @Published var tabSize: TabSize {
+        didSet { UserDefaults.standard.set(tabSize.rawValue, forKey: Key.tabSize) }
+    }
+
     @Published var tearOffStyle: TearOffStyle {
         didSet { UserDefaults.standard.set(tearOffStyle.rawValue, forKey: Key.tearOffStyle) }
     }
@@ -130,6 +149,14 @@ final class Settings: ObservableObject {
         customGroupingKey = Self.load(forKey: Key.customGroupingKey)
         tabShortcutsEnabled = defaults.bool(forKey: Key.tabShortcuts)
         tabStyle = defaults.string(forKey: Key.tabStyle).flatMap(TabStyle.init(rawValue:)) ?? .full
+        // "platinum" was renamed Metallic.
+        let theme = defaults.string(forKey: Key.tabTheme).map { $0 == "platinum" ? TabTheme.metallic.rawValue : $0 }
+        let savedTheme = theme.flatMap(TabTheme.init(rawValue:)) ?? .aqua
+        // Off unless you turn it on; an experimental theme saved without it goes back to Aqua.
+        let showExperimental = defaults.bool(forKey: Key.experimentalThemes)
+        showExperimentalThemes = showExperimental
+        tabTheme = savedTheme.isExperimental && !showExperimental ? .aqua : savedTheme
+        tabSize = defaults.string(forKey: Key.tabSize).flatMap(TabSize.init(rawValue:)) ?? .small
         tearOffStyle = defaults.string(forKey: Key.tearOffStyle).flatMap(TearOffStyle.init(rawValue:)) ?? .window
     }
 

@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "rectangle.stack", accessibilityDescription: "windowTABBED")
+        statusItem.button?.image = MenuBarIcon.image
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// "1.0.0 (5b945aa)", plus ", debug" for debug builds. The commit comes from build.sh.
-    private static var versionDescription: String {
+    static var versionDescription: String {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "?"
         var details = [info["WTCommit"] as? String ?? "unknown"]

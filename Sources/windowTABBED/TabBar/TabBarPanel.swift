@@ -18,11 +18,18 @@ final class TabBarModel: ObservableObject {
     @Published var tabWidth: CGFloat = TabBarPanel.maxTabWidth
     /// Settings › Tabs › Icon only: tabs show just the app icon (and × on the active one).
     @Published var iconOnly = false
+    /// Settings › Tabs › Theme, already resolved for this macOS.
+    @Published var theme: TabTheme = Settings.shared.tabTheme.resolved
+    /// Settings › Tabs › Size.
+    @Published var scale: CGFloat = TabBarPanel.scale
     /// The tab being dragged: the drag overlay draws it, so the bar's copy is hidden.
     @Published var draggingID: CGWindowID?
     /// A tab whose window was pulled out mid-drag (Window style): kept so its drag gesture
     /// lives on, but drawn with no width.
     @Published var collapsedID: CGWindowID?
+
+    /// Space between tabs for this theme and size.
+    var spacing: CGFloat { (theme.spacing * scale).rounded() }
 
     /// Tabs that take up room in the bar.
     var visibleCount: Int { tabs.filter { $0.id != collapsedID }.count }
@@ -47,15 +54,18 @@ final class TabBarModel: ObservableObject {
 /// The tab strip window. One per group, owned by windowTABBED, ordered directly above the
 /// group's active window so other apps' windows can still cover it normally.
 final class TabBarPanel: NSPanel {
-    static let height: CGFloat = 30
-    static let maxTabWidth: CGFloat = 184
-    static let minTabWidth: CGFloat = 60
-    static let tabSpacing: CGFloat = 2
+    /// Settings › Tabs › Size: every measurement below grows with it.
+    static var scale: CGFloat { Settings.shared.tabSize.scale }
+    static var height: CGFloat { (30 * scale).rounded() }
+    static var maxTabWidth: CGFloat { (184 * scale).rounded() }
+    static var minTabWidth: CGFloat { (60 * scale).rounded() }
+    /// Space between tabs: each theme has its own.
+    static var tabSpacing: CGFloat { (Settings.shared.tabTheme.resolved.spacing * scale).rounded() }
     /// Distance from the window's left edge to the first tab.
     static let inset: CGFloat = 16
     /// Icon-only tabs: padding, a 16 pt icon, padding. The active one also fits its ×.
-    static let iconTabWidth: CGFloat = 36
-    static let iconActiveTabWidth: CGFloat = 56
+    static var iconTabWidth: CGFloat { (36 * scale).rounded() }
+    static var iconActiveTabWidth: CGFloat { (56 * scale).rounded() }
 
     let model = TabBarModel()
     /// Where the bar was last put, so a change of tab style can lay it out again right away.
@@ -77,11 +87,17 @@ final class TabBarPanel: NSPanel {
         // Keep it out of Cmd-` and Mission Control's window list.
         collectionBehavior = [.managed, .ignoresCycle]
         contentView = FirstMouseHostingView(rootView: TabStripView(model: model))
-        styleSubscription = Settings.shared.$tabStyle.sink { [weak self] style in
+        styleSubscription = Settings.shared.$tabStyle.combineLatest(Settings.shared.$tabTheme, Settings.shared.$tabSize).sink { [weak self] style, theme, size in
             guard let self else { return }
             self.model.iconOnly = style == .icon
-            if let last = self.lastAttach, self.isVisible {
-                self.attach(above: last.windowID, frame: last.frame, placement: last.placement)
+            self.model.theme = theme.resolved
+            self.model.scale = size.scale
+            // @Published sends before the new value is stored, and the bar's measurements read
+            // Settings: lay it out again once it has.
+            DispatchQueue.main.async {
+                if let last = self.lastAttach, self.isVisible {
+                    self.attach(above: last.windowID, frame: last.frame, placement: last.placement)
+                }
             }
         }
     }
@@ -152,7 +168,7 @@ final class TabBarPanel: NSPanel {
             if tab.id == id { break }
             x += model.width(isActive: tab.id == model.activeID) + Self.tabSpacing
         }
-        let height = TabFace.activeHeight
+        let height = Self.height
         let y = model.flipped ? axFrame.minY : axFrame.maxY - height
         return CGRect(x: x, y: y, width: model.width(isActive: id == model.activeID), height: height)
     }

@@ -9,7 +9,11 @@ import SwiftUI
 ///   close <n>       click × on tab n of the first group
 ///   move <n> <m>    drag tab n to position m
 ///   dragout <n>     drag tab n out of the bar, dropping it at the pointer
+///   login on|off   open at login (logs the resulting status)
+///   size small|medium|large|extraLarge   the tab size
+///   theme aqua|glass|flat|pill|metallic|retro   the tab theme
 ///   tearoff window|outline|tab   how a tab dragged out of the bar looks
+///   themes <bundle id>…    show a bar of those apps in every theme for 4 s (logs the window number)
 ///   preview <bundle id>…   show an active and a background tab for each app for 4 s (logs the window number)
 ///   snapshot        save each bar as build/tabbar-<k>.png (and the Settings window, if open)
 ///   keydrag x1 y1 x2 y2   real mouse drag (AX points) with the grouping key held
@@ -50,6 +54,8 @@ final class DebugHooks {
             SettingsWindow.shared.show()
         case ("style", _, _) where parts.count == 2:
             Settings.shared.tabStyle = TabStyle(rawValue: String(parts[1])) ?? .full
+        case ("theme", _, _) where parts.count == 2:
+            Settings.shared.tabTheme = TabTheme(rawValue: String(parts[1])) ?? .aqua
         case ("tearoff", _, _) where parts.count == 2:
             Settings.shared.tearOffStyle = TearOffStyle(rawValue: String(parts[1])) ?? .window
         case ("record", _, _):
@@ -58,6 +64,27 @@ final class DebugHooks {
             press(String(parts[1]))
         case ("release", _, _):
             Self.releaseModifiers()
+        case ("size", _, _) where parts.count == 2:
+            Settings.shared.tabSize = TabSize(rawValue: String(parts[1])) ?? .small
+        case ("login", _, _) where parts.count == 2:
+            LoginItem.shared.set(parts[1] == "on")
+            log.notice("debug: login item status \(LoginItem.shared.status.rawValue, privacy: .public)")
+        case ("glyph", _, _):
+            // The menu bar glyph at 8x, black on white, for checking its drawing.
+            let size = NSSize(width: 144, height: 144)
+            let out = NSImage(size: size)
+            out.lockFocus()
+            NSColor.white.setFill(); NSRect(origin: .zero, size: size).fill()
+            MenuBarIcon.image.draw(in: NSRect(x: 0, y: 36, width: 108, height: 108))
+            MenuBarIcon.image.draw(in: NSRect(x: 112, y: 4, width: 18, height: 18))
+            out.unlockFocus()
+            if let tiff = out.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+                    .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("build/glyph.png")
+                try? png.write(to: url)
+            }
+        case ("themes", _, _) where parts.count >= 2:
+            MainActor.assumeIsolated { themesPreview(parts.dropFirst().map(String.init)) }
         case ("preview", _, _) where parts.count >= 2:
             MainActor.assumeIsolated { preview(parts.dropFirst().map(String.init)) }
         case ("snapshot", _, _):
@@ -99,6 +126,42 @@ final class DebugHooks {
         }
         .padding(10)
         .background(Color(white: 0.15))
+        showPreview(view)
+    }
+
+    /// Every theme: a bar of the given apps (the first one active) on a window edge, over a
+    /// colorful backdrop so glass has something to show.
+    @MainActor private func themesPreview(_ bundleIDs: [String]) {
+        let tabs = bundleIDs.enumerated().compactMap { index, id -> TabBarModel.Tab? in
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
+            let icon = NSWorkspace.shared.icon(forFile: url.path)
+            return TabBarModel.Tab(id: CGWindowID(index + 1), title: url.deletingPathExtension().lastPathComponent,
+                                   icon: icon, tint: AppTint.dominantColor(of: icon) ?? AppTint.fallback)
+        }
+        let view = VStack(alignment: .leading, spacing: 14) {
+            ForEach(TabTheme.allCases) { theme in
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .bottom, spacing: theme.resolved.spacing) {
+                        ForEach(tabs) { tab in
+                            TabFace(tab: tab, isActive: tab.id == 1, flipped: false, iconOnly: false,
+                                    width: 160, theme: theme.resolved)
+                        }
+                    }
+                    .frame(height: TabBarPanel.height, alignment: .bottom)
+                    .padding(.leading, TabBarPanel.inset)
+                    UnevenRoundedRectangle(topLeadingRadius: 10, topTrailingRadius: 10)
+                        .fill(Color(white: 0.13))
+                        .frame(width: 560, height: 26)
+                }
+            }
+        }
+        .padding(16)
+        .background(LinearGradient(colors: [Color(red: 0.12, green: 0.45, blue: 0.55), Color(red: 0.32, green: 0.28, blue: 0.62),
+                                            Color(red: 0.85, green: 0.45, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        showPreview(view)
+    }
+
+    @MainActor private func showPreview<V: View>(_ view: V) {
         // Shown for real for a few seconds, so `screencapture -l` sees exactly what the bar draws.
         let hosting = NSHostingView(rootView: view)
         let size = hosting.fittingSize

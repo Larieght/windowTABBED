@@ -9,6 +9,7 @@ final class SettingsWindow {
     let recorder = KeyRecorder()
 
     func show(welcome: Bool = false) {
+        LoginItem.shared.refresh()
         let window = self.window ?? makeWindow()
         self.window = window
         let view = SettingsView(welcome: welcome, recorder: recorder) { [weak window] in window?.close() }
@@ -83,6 +84,7 @@ final class KeyRecorder: ObservableObject {
 
 private struct SettingsView: View {
     @ObservedObject private var settings = Settings.shared
+    @ObservedObject private var loginItem = LoginItem.shared
     let welcome: Bool
     @ObservedObject var recorder: KeyRecorder
     let onDone: () -> Void
@@ -140,6 +142,15 @@ private struct SettingsView: View {
             Text("Tabs")
                 .font(.headline)
             segmentedPicker($settings.tabStyle, label: "Tab style")
+            ThemeGrid(selection: $settings.tabTheme, showExperimental: settings.showExperimentalThemes)
+            Toggle("Show experimental themes", isOn: $settings.showExperimentalThemes)
+                .font(.callout)
+            sizeSlider
+            if settings.tabTheme == .glass, settings.tabTheme.resolved != .glass {
+                Text("Liquid Glass needs macOS 26. Tabs use Aqua until then.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Text("Dragging a tab out")
                 .font(.headline)
@@ -155,6 +166,25 @@ private struct SettingsView: View {
                 .font(.headline)
             Toggle("Switch tabs with ⌃⌥← and ⌃⌥→", isOn: $settings.tabShortcutsEnabled)
 
+            Divider()
+
+            Text("General")
+                .font(.headline)
+            Toggle("Open windowTABBED at login", isOn: Binding(get: { loginItem.isOn }, set: loginItem.set))
+            if loginItem.needsApproval {
+                HStack(spacing: 8) {
+                    Text("Waiting for your OK in Login Items.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Open Login Items…", action: loginItem.openSystemSettings)
+                        .controlSize(.small)
+                }
+            }
+
+            Divider()
+
+            about
+
             HStack {
                 Spacer()
                 Button("Done", action: onDone)
@@ -165,6 +195,61 @@ private struct SettingsView: View {
         }
         .padding(20)
         .frame(width: 400)
+    }
+
+    /// Version, links to the project on GitHub, and who made it.
+    private var about: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage ?? NSImage())
+                .resizable()
+                .frame(width: 56, height: 56)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("windowTABBED")
+                    .font(.headline)
+                Text("Version \(AppDelegate.versionDescription)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                HStack(spacing: 8) {
+                    linkButton("GitHub", to: Links.repository)
+                    linkButton("Check for Updates", to: Links.releases)
+                    linkButton("Report a Bug", to: Links.newIssue)
+                }
+                .padding(.top, 2)
+                Text("© 2026 Larieght · Free and open source under the MIT license")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    private func linkButton(_ title: String, to url: URL) -> some View {
+        Button(title) { NSWorkspace.shared.open(url) }
+            .controlSize(.small)
+            .glassButton()
+    }
+
+    /// Four sizes on a slider with a stop for each; Small is the original size.
+    private var sizeSlider: some View {
+        let sizes = TabSize.allCases
+        let index = Binding<Double>(
+            get: { Double(sizes.firstIndex(of: settings.tabSize) ?? 0) },
+            set: { settings.tabSize = sizes[min(max(Int($0.rounded()), 0), sizes.count - 1)] })
+        return HStack(spacing: 10) {
+            Text("Size")
+            Slider(value: index, in: 0...Double(sizes.count - 1), step: 1) {
+                Text("Size")
+            } minimumValueLabel: {
+                Image(systemName: "textformat.size.smaller")
+            } maximumValueLabel: {
+                Image(systemName: "textformat.size.larger")
+            }
+            .labelsHidden()
+            Text(settings.tabSize.label)
+                .foregroundStyle(.secondary)
+                .frame(width: 76, alignment: .trailing)
+        }
     }
 
     private var tearOffNote: String {
@@ -258,3 +343,109 @@ protocol PickerOption: CaseIterable, Identifiable, Hashable {
 
 extension TabStyle: PickerOption {}
 extension TearOffStyle: PickerOption {}
+
+/// The themes as a grid of small live previews: each card draws real tabs in that theme. The
+/// chosen card sits on a tinted glass plate that slides across when you pick another (macOS 26+;
+/// earlier systems outline it in the accent color).
+private struct ThemeGrid: View {
+    @Binding var selection: TabTheme
+    let showExperimental: Bool
+    @Namespace private var plate
+
+    private static var spring: Animation { .spring(response: 0.32, dampingFraction: 0.72) }
+    private static let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+
+    /// Two sample tabs, from apps every Mac has.
+    private static let samples: [TabBarModel.Tab] = ["com.apple.Safari", "com.apple.mail"].enumerated().map { index, id in
+        let icon = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
+            .map { NSWorkspace.shared.icon(forFile: $0.path) } ?? NSApp.applicationIconImage ?? NSImage()
+        return TabBarModel.Tab(id: CGWindowID(index + 1), title: "", icon: icon,
+                               tint: AppTint.dominantColor(of: icon) ?? AppTint.fallback)
+    }
+
+    var body: some View {
+        LazyVGrid(columns: Self.columns, spacing: 8) {
+            // Two rows: Aqua, Liquid Glass and Retro 98, then the experimental three.
+            ForEach(TabTheme.displayOrder.filter { showExperimental || !$0.isExperimental }) { theme in
+                card(theme)
+                    .contentShape(RoundedRectangle(cornerRadius: 12))
+                    .onTapGesture {
+                        withAnimation(Self.spring) { selection = theme }
+                    }
+            }
+        }
+        .animation(Self.spring, value: selection)
+        .animation(Self.spring, value: showExperimental)
+    }
+
+    private func card(_ theme: TabTheme) -> some View {
+        let isSelected = selection == theme
+        return VStack(spacing: 5) {
+            preview(theme.resolved)
+                .overlay(alignment: .topTrailing) {
+                    if theme.isExperimental {
+                        Text("EXPERIMENTAL")
+                            .font(.system(size: 7, weight: .heavy))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1.5)
+                            .background(Capsule().fill(.orange))
+                            .padding(3)
+                    }
+                }
+            Text(theme.label)
+                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? .primary : .secondary)
+        }
+        .padding(5)
+        .background {
+            if isSelected {
+                if #available(macOS 26, *) {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.clear)
+                        .glassEffect(.regular.tint(.accentColor.opacity(0.45)).interactive(),
+                                     in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .matchedGeometryEffect(id: "plate", in: plate)
+                } else {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.accentColor, lineWidth: 2)
+                        .matchedGeometryEffect(id: "plate", in: plate)
+                }
+            }
+        }
+    }
+
+    /// An active and a background tab sitting on a window's top edge, over a colorful backdrop
+    /// so glass has something to show.
+    private func preview(_ theme: TabTheme) -> some View {
+        let scale: CGFloat = 0.8
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .bottom, spacing: (theme.spacing * scale).rounded()) {
+                TabFace(tab: Self.samples[0], isActive: true, flipped: false, iconOnly: true,
+                        width: (56 * scale).rounded(), theme: theme, scale: scale)
+                TabFace(tab: Self.samples[1], isActive: false, flipped: false, iconOnly: true,
+                        width: (36 * scale).rounded(), theme: theme, scale: scale)
+            }
+            .frame(height: (30 * scale).rounded(), alignment: .bottom)
+            .padding(.leading, 8)
+            .allowsHitTesting(false)
+            UnevenRoundedRectangle(topLeadingRadius: 6, topTrailingRadius: 6)
+                .fill(Color(white: 0.13))
+                .frame(height: 14)
+        }
+        .padding(.top, 8)
+        .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity)
+        .background(LinearGradient(colors: [Color(red: 0.12, green: 0.45, blue: 0.55), Color(red: 0.32, green: 0.28, blue: 0.62),
+                                            Color(red: 0.85, green: 0.45, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+/// The project on GitHub.
+enum Links {
+    static let repository = URL(string: "https://github.com/Larieght/windowTABBED")!
+    /// Releases: where a newer version shows up.
+    static let releases = URL(string: "https://github.com/Larieght/windowTABBED/releases")!
+    static let newIssue = URL(string: "https://github.com/Larieght/windowTABBED/issues/new")!
+}

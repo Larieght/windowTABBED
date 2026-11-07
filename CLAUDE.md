@@ -35,7 +35,8 @@ with the code.
 
 ## Code map
 
-- `App/`: entry point and status menu (`AppDelegate`), Accessibility permission, and `DebugHooks`
+- `App/`: entry point and status menu (`AppDelegate`), the menu bar glyph drawn in code
+  (`MenuBarIcon`, a template image after the app icon), Accessibility permission, and `DebugHooks`
   (debug builds only).
 - `Windows/`: other apps' windows. `WindowDriver` reads and moves them through Accessibility and
   reads the window server. `WindowWatcher` turns AX notifications into `WindowEvent`s.
@@ -46,8 +47,9 @@ with the code.
   click-through `DragOverlay` window draws the dragged tab, since the bar itself is only 30 pt tall.
 - `TabBar/`: the tab strip, one borderless non-activating `NSPanel` per group, ordered just above
   the group's active window. SwiftUI tabs, tinted by the app icon's color (`AppTint`).
-- `Settings/`: preferences (`Settings`), the Settings window with its key recorder, and the
-  ⌃⌥←/→ tab shortcuts (Carbon hot keys).
+- `Settings/`: preferences (`Settings`), the Settings window with its key recorder, theme grid and
+  About section, Open at login (`LoginItem`, through `SMAppService`), and the ⌃⌥←/→ tab shortcuts
+  (Carbon hot keys).
 
 ## Things that look wrong but aren't
 
@@ -79,7 +81,12 @@ are timing and window-server behavior that only show up live.
   - Tabs: `select n`, `close n`, `move n m`, `dragout n`.
   - Drags: `keydrag x1 y1 x2 y2` (with the grouping key), `drag x1 y1 x2 y2` (plain, logs the
     bar's lag), `setpos n x y`.
-  - Settings: `settings`, `style full|icon`, `record`, `press ctrl,opt`.
+  - Settings: `settings`, `style full|icon`, `theme aqua|glass|flat|pill|platinum|retro`,
+    `size small|medium|large|extraLarge`, `glyph` (menu bar glyph to `build/glyph.png`), `login on|off` (changes the real login item:
+    put it back),
+    `tearoff window|outline|tab`, `record`, `press ctrl,opt`.
+  - Looks: `themes <bundle id>…` and `preview <bundle id>…` show sample tabs in a real window for
+    4 s and log its number, for `screencapture -l` (no one's windows involved).
   - Other: `release` (clears stuck modifiers), `snapshot` (saves the bars and Settings to
     `build/*.png`), `menu` (logs the status menu's items).
 - With Accessibility allowed for the terminal, `osascript` can drive WT's real menu. WT has no app
@@ -111,9 +118,12 @@ Safe on-screen testing, learned the hard way. You're testing on someone's real d
 The maintainer's choices. Discuss before changing them.
 
 - Tack-style tabs: app icon + short title, left-aligned, not full width. An "icon only" style is a
-  setting. Light Aqua gradient and gloss, strong active/background contrast. **No Liquid Glass**,
-  except the Settings window's controls (`glassButton()` and the segmented picker in
-  `SettingsWindow.swift`, macOS 26+).
+  setting. Strong active/background contrast: the active tab is brighter and its title semibold.
+- Themes (`TabBar/TabTheme.swift`, drawn in `TabFace`): Aqua (default: light gradient and gloss
+  tinted by the app icon), Liquid Glass (macOS 26+, else Aqua), Retro 98, and the experimental
+  Flat, Pill and Metallic (`isExperimental`: below the maintainer's standard, behind a toggle).
+  Designs are on the Figma file's Themes page. Liquid Glass appears only as that tab theme and in
+  the Settings window's controls (`glassButton()` and the segmented picker, macOS 26+).
 - Tab switches use a fast, jumpy spring (stiffness 700, damping 18). **Only the tabs animate**: the
   real window's content swaps instantly, with no fade.
 
