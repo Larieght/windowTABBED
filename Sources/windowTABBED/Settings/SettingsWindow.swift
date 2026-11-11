@@ -1,25 +1,32 @@
 import AppKit
 import SwiftUI
 
-/// The Settings window: a page per toolbar tab (General, Appearance, Behavior, Experimental,
-/// About), so it stays short however many settings there are. On first launch it opens on
-/// General, which doubles as the welcome screen where you pick your grouping key.
+/// The Settings window: a page per tab (General, Appearance, Behavior, Experimental, About), so it
+/// stays short however many settings there are. The tabs are WT's own glass strip rather than a
+/// window toolbar, so a click gets a press, a sliding highlight and a little bounce. On first
+/// launch it opens on General, which doubles as the welcome screen where you pick your grouping key.
 final class SettingsWindow {
     static let shared = SettingsWindow()
 
     private(set) var window: NSWindow?
     let recorder = KeyRecorder()
-    /// The page Settings opens on next time.
-    private var lastPage = SettingsPage.general
+    /// The page showing, and the one Settings opens on next time.
+    let navigation = SettingsNavigation()
 
     func show(welcome: Bool = false, page: SettingsPage? = nil) {
         LoginItem.shared.refresh()
         let window = self.window ?? makeWindow()
         self.window = window
-        let tabs = SettingsTabs(welcome: welcome, recorder: recorder, onDone: { [weak window] in window?.close() })
-        tabs.onSelect = { [weak self] page in self?.lastPage = page }
-        window.contentViewController = tabs
-        tabs.select(welcome ? .general : page ?? lastPage)
+        if welcome {
+            navigation.page = .general
+        } else if let page {
+            navigation.page = page
+        }
+        let root = SettingsRoot(welcome: welcome, recorder: recorder, navigation: navigation,
+                                onDone: { [weak window] in window?.close() })
+        let controller = SettingsHostingController(rootView: AnyView(root))
+        window.contentViewController = controller
+        controller.fitWindow(animate: false)
         window.center()
         // A menu bar app has to activate itself, or its window opens behind everything.
         NSApp.activate()
@@ -33,7 +40,6 @@ final class SettingsWindow {
             backing: .buffered,
             defer: false)
         window.title = "windowTABBED Settings"
-        window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             self?.recorder.cancel()
@@ -42,7 +48,7 @@ final class SettingsWindow {
     }
 }
 
-/// The Settings pages, one per toolbar tab.
+/// The Settings pages, one per tab.
 enum SettingsPage: String, CaseIterable {
     case general, appearance, behavior, experimental, about
 
@@ -69,74 +75,146 @@ enum SettingsPage: String, CaseIterable {
     }
 }
 
-/// The toolbar tabs. The window takes each page's height, keeping its top edge where it is, and
-/// follows a page that grows or shrinks while it's open.
-private final class SettingsTabs: NSTabViewController {
-    var onSelect: ((SettingsPage) -> Void)?
+/// Which page is showing. Held outside the views (no @State without Xcode's macros).
+final class SettingsNavigation: ObservableObject {
+    @Published var page = SettingsPage.general
+    /// Counts clicks per tab, so its icon bounces each time you pick it.
+    @Published var picks: [SettingsPage: Int] = [:]
 
-    init(welcome: Bool, recorder: KeyRecorder, onDone: @escaping () -> Void) {
-        super.init(nibName: nil, bundle: nil)
-        tabStyle = .toolbar
-        transitionOptions = []
-        for page in SettingsPage.allCases {
-            let content: AnyView = switch page {
-            case .general: AnyView(GeneralPage(welcome: welcome, recorder: recorder, onDone: onDone))
-            case .appearance: AnyView(AppearancePage())
-            case .behavior: AnyView(BehaviorPage())
-            case .experimental: AnyView(ExperimentalPage())
-            case .about: AnyView(AboutPage())
-            }
-            let hosting = NSHostingController(rootView: content
-                .padding(20)
-                .frame(width: SettingsPage.width, alignment: .topLeading)
-                .fixedSize(horizontal: false, vertical: true))
-            hosting.sizingOptions = [.preferredContentSize]
-            let item = NSTabViewItem(viewController: hosting)
-            item.label = page.label
-            item.identifier = page.rawValue
-            item.image = NSImage(systemSymbolName: page.symbol, accessibilityDescription: page.label)
-            addTabViewItem(item)
-        }
+    func pick(_ page: SettingsPage) {
+        picks[page, default: 0] += 1
+        withAnimation(SettingsTabStrip.spring) { self.page = page }
+    }
+}
+
+/// Hosts the Settings view. The window takes the view's height, keeping its top edge where it
+/// is, and follows it when a page grows or shrinks (another tab, or a setting that shows more).
+private final class SettingsHostingController: NSHostingController<AnyView> {
+    override init(rootView: AnyView) {
+        super.init(rootView: rootView)
+        sizingOptions = [.preferredContentSize]
     }
 
-    required init?(coder: NSCoder) { nil }
+    @MainActor required init?(coder: NSCoder) { nil }
 
-    func select(_ page: SettingsPage) {
-        selectedTabViewItemIndex = SettingsPage.allCases.firstIndex(of: page) ?? 0
-        fitWindow(animate: false)
+    override var preferredContentSize: NSSize {
+        didSet { if preferredContentSize != oldValue { fitWindow(animate: true) } }
     }
 
-    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
-        super.tabView(tabView, didSelect: tabViewItem)
-        if let id = tabViewItem?.identifier as? String, let page = SettingsPage(rawValue: id) {
-            onSelect?(page)
-        }
-        fitWindow(animate: true)
-    }
-
-    override func preferredContentSizeDidChange(for viewController: NSViewController) {
-        super.preferredContentSizeDidChange(for: viewController)
-        if viewController === tabViewItems[safe: selectedTabViewItemIndex]?.viewController {
-            fitWindow(animate: true)
-        }
-    }
-
-    private func fitWindow(animate: Bool) {
-        guard let window = view.window ?? SettingsWindow.shared.window,
-              let page = tabViewItems[safe: selectedTabViewItemIndex]?.viewController
-        else { return }
-        let size = page.view.fittingSize
+    func fitWindow(animate: Bool) {
+        guard let window = view.window ?? SettingsWindow.shared.window else { return }
+        let height = preferredContentSize.height > 0 ? preferredContentSize.height : view.fittingSize.height
         let content = window.contentRect(forFrameRect: window.frame)
-        let target = window.frameRect(forContentRect: NSRect(x: content.minX, y: content.maxY - size.height,
-                                                             width: SettingsPage.width, height: size.height))
+        let target = window.frameRect(forContentRect: NSRect(x: content.minX, y: content.maxY - height,
+                                                             width: SettingsPage.width, height: height))
         guard target != window.frame else { return }
-        window.setFrame(target, display: true, animate: animate && window.isVisible)
+        if animate, window.isVisible {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.28
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(target, display: true)
+            }
+        } else {
+            window.setFrame(target, display: true)
+        }
     }
 }
 
-private extension Array {
-    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
+/// The tab strip over the current page. The page fades in as the window resizes around it.
+private struct SettingsRoot: View {
+    let welcome: Bool
+    @ObservedObject var recorder: KeyRecorder
+    @ObservedObject var navigation: SettingsNavigation
+    let onDone: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SettingsTabStrip(navigation: navigation)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+            ZStack(alignment: .top) {
+                page(navigation.page)
+                    .padding(20)
+                    .frame(width: SettingsPage.width, alignment: .topLeading)
+                    .id(navigation.page)
+                    .transition(.opacity.combined(with: .offset(y: 8)))
+            }
+        }
+        .frame(width: SettingsPage.width)
+        .fixedSize(horizontal: false, vertical: true)
+        // While the window animates to a new height, the page stays pinned to the top.
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder private func page(_ page: SettingsPage) -> some View {
+        switch page {
+        case .general: GeneralPage(welcome: welcome, recorder: recorder, onDone: onDone)
+        case .appearance: AppearancePage()
+        case .behavior: BehaviorPage()
+        case .experimental: ExperimentalPage()
+        case .about: AboutPage()
+        }
+    }
 }
+
+/// Icon-and-label tabs. The chosen one sits on a glass plate that springs across to the tab you
+/// click; a tab squashes while pressed and its icon bounces when picked.
+private struct SettingsTabStrip: View {
+    @ObservedObject var navigation: SettingsNavigation
+    @Namespace private var plate
+
+    static let spring = Animation.spring(response: 0.34, dampingFraction: 0.72)
+    private static let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(SettingsPage.allCases, id: \.self) { page in
+                let selected = navigation.page == page
+                Button { navigation.pick(page) } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: page.symbol)
+                            .font(.system(size: 17, weight: .medium))
+                            .symbolEffect(.bounce, value: navigation.picks[page, default: 0])
+                            .frame(height: 22)
+                        Text(page.label)
+                            .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                    }
+                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    .frame(width: 76, height: 52)
+                    .background {
+                        if selected {
+                            plateView.matchedGeometryEffect(id: "plate", in: plate)
+                        }
+                    }
+                    .contentShape(Self.shape)
+                }
+                .buttonStyle(PressStyle())
+            }
+        }
+        .padding(4)
+        .animation(Self.spring, value: navigation.page)
+    }
+
+    @ViewBuilder private var plateView: some View {
+        if #available(macOS 26, *) {
+            Self.shape
+                .fill(.clear)
+                .glassEffect(.regular.tint(.accentColor.opacity(0.22)).interactive(), in: Self.shape)
+        } else {
+            Self.shape.fill(Color.primary.opacity(0.1))
+        }
+    }
+}
+
+/// Squashes a little while pressed and springs back.
+private struct PressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.55), value: configuration.isPressed)
+    }
+}
+
 
 /// Records a grouping key combination: hold the keys you want, then let go of them.
 /// Esc cancels. Only works while the Settings window is in front, since it listens locally.

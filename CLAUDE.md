@@ -48,8 +48,9 @@ with the code.
   click-through `DragOverlay` window draws the dragged tab, since the bar itself is only 30 pt tall.
 - `TabBar/`: the tab strip, one borderless non-activating `NSPanel` per group, ordered just above
   the group's active window. SwiftUI tabs, tinted by the app icon's color (`AppTint`).
-- `Settings/`: preferences (`Settings`), the Settings window (an `NSTabViewController` with a
-  toolbar tab per `SettingsPage`, each a SwiftUI page; the window takes the page's height) with its
+- `Settings/`: preferences (`Settings`), the Settings window (a glass tab strip of WT's own over
+  one SwiftUI page per `SettingsPage`, not a window toolbar, so clicks animate; the window takes the
+  page's height) with its
   key recorder and theme grid, Open at login (`LoginItem`, through `SMAppService`), and the ⌃⌥←/→ tab shortcuts
   (Carbon hot keys).
 

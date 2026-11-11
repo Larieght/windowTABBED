@@ -87,7 +87,8 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 
 ## Settings › General and About
 
-- Settings has a toolbar tab per page: **General** (grouping key, ⌃⌥←/→, Open at login),
+- Settings has a tab per page, on a strip at the top (a glass plate slides to the tab you click,
+  which squashes while pressed and bounces its icon; the page fades over): **General** (grouping key, ⌃⌥←/→, Open at login),
   **Appearance** (tab style, size, theme), **Behavior** (dragging a tab out, pinned bars, scrolling),
   **Experimental** (stacking, experimental themes) and **About**. The window takes each page's
   height. On first launch it opens on General with a welcome and a Done button.
