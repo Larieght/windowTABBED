@@ -68,6 +68,13 @@ with the code.
   It dims (alpha) while `WindowDriver.isCovered` finds another app's window above the group's
   active window overlapping it; the 1 s timer rechecks, since a window can cover it with no focus
   change. Hover is tracked by an `.activeAlways` tracking area, because WT is never the active app.
+- **Stacked piles are one `Slot`** (`TabBarModel.slots`): the front tab is a normal `TabChip`, the
+  others `TabFace(peeking:)` offset outward. A dragged tab stays the front of its pile until the
+  button goes up, because moving its view elsewhere ends its drag gesture (a local mouse-up monitor
+  in `GroupManager` finishes a tear-off whose gesture died anyway). The bar is taller by
+  `extraHeight` while stacked.
+- **Scrolling anywhere is a `CGEvent` tap** (`ScrollSwitcher.swift`), not a global monitor, which
+  couldn't stop the window from scrolling too. It runs only with Settings › Scrolling › Anywhere.
 - **Raising a window also sets `kAXFrontmost` on its app**: since macOS 14, a background app's
   `activate()` request can be ignored after a click on the non-activating bar.
 - **The grouping key is modifiers only** (⇧ ⌃ ⌥ ⌘ fn), so holding it never types into the app.
@@ -89,8 +96,10 @@ are timing and window-server behavior that only show up live.
   - Settings: `settings`, `style full|icon`, `theme aqua|glass|flat|pill|platinum|retro`,
     `size small|medium|large|extraLarge`, `glyph` (menu bar glyph to `build/glyph.png`), `login on|off` (changes the real login item:
     put it back),
-    `tearoff window|outline|tab`, `pinlook dimmed|normal`, `record`, `press ctrl,opt`.
+    `tearoff window|outline|tab`, `pinlook dimmed|normal`, `scrollarea bar|anywhere`,
+    `scrollends stop|wrap`, `record`, `press ctrl,opt`.
   - Pinning: `pin` toggles the first group's pin and logs whether it's covered and its alpha.
+  - `stacking on|off` (the experimental setting), `stack` toggles stacking by app; `scroll -1|1` steps tabs as a scroll would.
   - Looks: `themes <bundle id>…` and `preview <bundle id>…` show sample tabs in a real window for
     4 s and log its number, for `screencapture -l` (no one's windows involved).
   - Other: `release` (clears stuck modifiers), `snapshot` (saves the bars and Settings to
@@ -125,11 +134,14 @@ The maintainer's choices. Discuss before changing them.
 
 - Tack-style tabs: app icon + short title, left-aligned, not full width. An "icon only" style is a
   setting. Strong active/background contrast: the active tab is brighter and its title semibold.
-- Themes (`TabBar/TabTheme.swift`, drawn in `TabFace`): Aqua (default: light gradient and gloss
-  tinted by the app icon), Liquid Glass (macOS 26+, else Aqua), Retro 98, and the experimental
+- Themes (`TabBar/TabTheme.swift`, drawn in `TabFace`): Liquid Glass (the default,
+  `TabTheme.standard`; macOS 26+, else Aqua), Aqua (light gradient and gloss tinted by the app
+  icon), Retro 98, and the experimental
   Flat, Pill and Metallic (`isExperimental`: below the maintainer's standard, behind a toggle).
   Designs are on the Figma file's Themes page. Liquid Glass appears only as that tab theme and in
   the Settings window's controls (`glassButton()` and the segmented picker, macOS 26+).
+- Stacking tabs by app is **experimental** and off by default (`Settings.stackingEnabled`): only
+  with it on does the bar's right-click menu offer Stack Tabs by App.
 - Tab switches use a fast, jumpy spring (stiffness 700, damping 18). **Only the tabs animate**: the
   real window's content swaps instantly, with no fade.
 

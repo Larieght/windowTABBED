@@ -50,6 +50,16 @@ final class DebugHooks {
         case ("pin", _, let group?):
             groups.setPinned(!group.bar.isPinned, group)
             log.notice("debug: pinned \(group.bar.isPinned, privacy: .public) covered \(group.bar.isCovered, privacy: .public) alpha \(group.bar.alphaValue, privacy: .public)")
+        case ("scroll", _, let group?) where parts.count == 2:
+            groups.scrollTabs(by: Int(parts[1]) ?? 1, in: group)
+        case ("scrollarea", _, _) where parts.count == 2:
+            Settings.shared.scrollArea = ScrollArea(rawValue: String(parts[1])) ?? .bar
+        case ("scrollends", _, _) where parts.count == 2:
+            Settings.shared.scrollEnds = ScrollEnds(rawValue: String(parts[1])) ?? .stop
+        case ("stacking", _, _) where parts.count == 2:
+            Settings.shared.stackingEnabled = parts[1] == "on"
+        case ("stack", _, let group?):
+            groups.setStacked(!group.isStacked, group)
         case ("pinlook", _, _) where parts.count == 2:
             Settings.shared.pinnedLook = PinnedLook(rawValue: String(parts[1])) ?? .dimmed
         case ("menu", _, _):
@@ -60,7 +70,7 @@ final class DebugHooks {
         case ("style", _, _) where parts.count == 2:
             Settings.shared.tabStyle = TabStyle(rawValue: String(parts[1])) ?? .full
         case ("theme", _, _) where parts.count == 2:
-            Settings.shared.tabTheme = TabTheme(rawValue: String(parts[1])) ?? .aqua
+            Settings.shared.tabTheme = TabTheme(rawValue: String(parts[1])) ?? .standard
         case ("tearoff", _, _) where parts.count == 2:
             Settings.shared.tearOffStyle = TearOffStyle(rawValue: String(parts[1])) ?? .window
         case ("record", _, _):

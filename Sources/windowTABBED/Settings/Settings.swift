@@ -104,6 +104,34 @@ enum PinnedLook: String, CaseIterable, Identifiable {
     }
 }
 
+/// Where scrolling switches tabs. Over a tab bar it always does.
+enum ScrollArea: String, CaseIterable, Identifiable {
+    case bar, anywhere
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .bar: "Over the tab bar"
+        case .anywhere: "Anywhere, holding a key"
+        }
+    }
+}
+
+/// What scrolling past the first or last tab does.
+enum ScrollEnds: String, CaseIterable, Identifiable {
+    case stop, wrap
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .stop: "Stop"
+        case .wrap: "Wrap around"
+        }
+    }
+}
+
 /// User preferences, saved in UserDefaults.
 final class Settings: ObservableObject {
     static let shared = Settings()
@@ -120,6 +148,10 @@ final class Settings: ObservableObject {
         static let tabSize = "tabSize"
         static let experimentalThemes = "showExperimentalThemes"
         static let pinnedLook = "pinnedLook"
+        static let stackingEnabled = "stackingEnabled"
+        static let scrollArea = "scrollArea"
+        static let scrollKey = "scrollKeyFlags"
+        static let scrollEnds = "scrollEnds"
     }
 
     /// No default on purpose: you pick it on first launch (SPEC.md).
@@ -145,11 +177,12 @@ final class Settings: ObservableObject {
         didSet { UserDefaults.standard.set(tabTheme.rawValue, forKey: Key.tabTheme) }
     }
 
-    /// Offers the experimental themes in Settings. Turning it off while using one goes back to Aqua.
+    /// Offers the experimental themes in Settings. Turning it off while using one goes back to the
+    /// default theme.
     @Published var showExperimentalThemes: Bool {
         didSet {
             UserDefaults.standard.set(showExperimentalThemes, forKey: Key.experimentalThemes)
-            if !showExperimentalThemes, tabTheme.isExperimental { tabTheme = .aqua }
+            if !showExperimentalThemes, tabTheme.isExperimental { tabTheme = .standard }
         }
     }
 
@@ -165,6 +198,25 @@ final class Settings: ObservableObject {
         didSet { UserDefaults.standard.set(pinnedLook.rawValue, forKey: Key.pinnedLook) }
     }
 
+    /// Experimental, off by default: offers Stack Tabs by App in the tab bar's right-click menu.
+    /// Turning it off spreads out any stacked groups (GroupManager).
+    @Published var stackingEnabled: Bool {
+        didSet { UserDefaults.standard.set(stackingEnabled, forKey: Key.stackingEnabled) }
+    }
+
+    @Published var scrollArea: ScrollArea {
+        didSet { UserDefaults.standard.set(scrollArea.rawValue, forKey: Key.scrollArea) }
+    }
+
+    /// The key to hold for scrolling anywhere over a group's window. One modifier, ⌥ by default.
+    @Published var scrollKey: GroupingKey {
+        didSet { Self.save(scrollKey, forKey: Key.scrollKey) }
+    }
+
+    @Published var scrollEnds: ScrollEnds {
+        didSet { UserDefaults.standard.set(scrollEnds.rawValue, forKey: Key.scrollEnds) }
+    }
+
     private init() {
         let defaults = UserDefaults.standard
         groupingKey = Self.load(forKey: Key.groupingKey) ?? Self.legacyGroupingKey()
@@ -173,14 +225,18 @@ final class Settings: ObservableObject {
         tabStyle = defaults.string(forKey: Key.tabStyle).flatMap(TabStyle.init(rawValue:)) ?? .full
         // "platinum" was renamed Metallic.
         let theme = defaults.string(forKey: Key.tabTheme).map { $0 == "platinum" ? TabTheme.metallic.rawValue : $0 }
-        let savedTheme = theme.flatMap(TabTheme.init(rawValue:)) ?? .aqua
+        let savedTheme = theme.flatMap(TabTheme.init(rawValue:)) ?? .standard
         // Off unless you turn it on; an experimental theme saved without it goes back to Aqua.
         let showExperimental = defaults.bool(forKey: Key.experimentalThemes)
         showExperimentalThemes = showExperimental
-        tabTheme = savedTheme.isExperimental && !showExperimental ? .aqua : savedTheme
+        tabTheme = savedTheme.isExperimental && !showExperimental ? .standard : savedTheme
         tabSize = defaults.string(forKey: Key.tabSize).flatMap(TabSize.init(rawValue:)) ?? .small
         tearOffStyle = defaults.string(forKey: Key.tearOffStyle).flatMap(TearOffStyle.init(rawValue:)) ?? .window
         pinnedLook = defaults.string(forKey: Key.pinnedLook).flatMap(PinnedLook.init(rawValue:)) ?? .dimmed
+        stackingEnabled = defaults.bool(forKey: Key.stackingEnabled)
+        scrollArea = defaults.string(forKey: Key.scrollArea).flatMap(ScrollArea.init(rawValue:)) ?? .bar
+        scrollKey = Self.load(forKey: Key.scrollKey) ?? GroupingKey(.option)
+        scrollEnds = defaults.string(forKey: Key.scrollEnds).flatMap(ScrollEnds.init(rawValue:)) ?? .stop
     }
 
     /// A recorded combination. A single modifier is one of the presets already; anything else

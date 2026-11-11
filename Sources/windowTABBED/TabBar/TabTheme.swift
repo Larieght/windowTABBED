@@ -2,9 +2,12 @@ import AppKit
 
 /// How tabs are drawn. Settings › Tabs › Theme. Designs: the Figma file's Themes page.
 enum TabTheme: String, CaseIterable, Identifiable {
+    /// The theme you get until you pick one.
+    static let standard = TabTheme.glass
+
     /// Glossy gradient tinted by the app icon, tack-shaped tabs joined to the window (the original).
     case aqua
-    /// Frosted glass tinted by the app color. macOS 26+; earlier systems draw Aqua.
+    /// Frosted glass tinted by the app color, the default. macOS 26+; earlier systems draw Aqua.
     case glass
     /// Solid neutral tabs; the active one is lighter with a stripe in the app color.
     case flat

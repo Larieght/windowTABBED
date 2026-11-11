@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 /// Windows that share one tab bar. The active one sits at the group's frame; the others are
 /// parked out of sight (see Parking) until you switch to them.
@@ -13,6 +14,10 @@ final class WindowGroup {
     /// The active window is full screen: the group pauses and the bar hides.
     var isFullScreen = false
     var isPaused: Bool { isMinimized || isFullScreen }
+    /// Right-click › Stack Tabs by App.
+    var isStacked = false
+    /// Per app, the tab last brought to the front of its pile.
+    var pileFronts: [pid_t: CGWindowID] = [:]
 
     init(window: ExternalWindow, frame: CGRect) {
         windows = [window]
@@ -45,12 +50,38 @@ final class GroupManager {
     let overlay = DragOverlay()
     let mover = WindowMover()
 
+    /// Settings › Scrolling › Anywhere, holding a key.
+    private lazy var scrollTap = ScrollTap(groups: self)
+    private var scrollSubscription: AnyCancellable?
+    private var stackingSubscription: AnyCancellable?
+
     /// Offset for a window that leaves its group with ×, so it doesn't vanish behind the group.
     private static let detachOffset: CGFloat = 30
 
     init() {
         watcher.onEvent = { [weak self] event in self?.handle(event) }
         recoverParkedWindows()
+        // Safety net: if a tab's view is rebuilt mid-drag its gesture never ends, which would
+        // leave the tear-off (and its overlay) behind. The button going up ends it regardless.
+        NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+            DispatchQueue.main.async {
+                guard let self, let session = self.tearOff, !session.isSettling, let group = session.group else { return }
+                log.notice("A tab drag ended without its gesture; finishing it")
+                self.tabDragEnded(session.id, in: group)
+            }
+            return event
+        }
+        // Stacking is experimental: switching it off spreads every stacked group out again.
+        stackingSubscription = Settings.shared.$stackingEnabled.sink { [weak self] enabled in
+            guard let self, !enabled else { return }
+            for group in self.groups where group.isStacked {
+                self.setStacked(false, group)
+            }
+        }
+        scrollSubscription = Settings.shared.$scrollArea.sink { [weak self] area in
+            guard let self else { return }
+            if area == .anywhere { self.scrollTap.start() } else { self.scrollTap.stop() }
+        }
         // Safety net for apps that close windows without telling Accessibility (Finder).
         // Also for full screen, which doesn't always send a resize notification.
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -113,6 +144,14 @@ final class GroupManager {
                 guard let self, let group else { return }
                 self.tabDragEnded(id, in: group)
             }
+            group.bar.onScroll = { [weak self, weak group] step in
+                guard let self, let group else { return }
+                self.scrollTabs(by: step, in: group)
+            }
+            group.bar.onToggleStack = { [weak self, weak group] in
+                guard let self, let group else { return }
+                self.setStacked(!group.isStacked, group)
+            }
             group.bar.onTogglePin = { [weak self, weak group] in
                 guard let self, let group else { return }
                 self.setPinned(!group.bar.isPinned, group)
@@ -133,6 +172,7 @@ final class GroupManager {
         guard let window = group.windows.first(where: { $0.windowID == id }) else { return }
         let previous = group.active
         group.activeID = id
+        group.pileFronts[window.pid] = id
         if previous?.windowID != id {
             window.setFrame(group.frame)
         }
@@ -212,7 +252,7 @@ final class GroupManager {
         else { return }
         let first = draggingID != id
         draggingID = id
-        group.bar.attach(above: id, frame: frame, placement: TabBarPanel.placement(for: frame) ?? .overlapping, reorder: first)
+        group.bar.attach(above: id, frame: frame, placement: TabBarPanel.placement(for: frame, extra: group.bar.model.extraHeight) ?? .overlapping, reorder: first)
     }
 
     /// The button went up: the group catches up with wherever the window ended.
@@ -252,6 +292,23 @@ final class GroupManager {
         groups.forEach(dissolve)
     }
 
+    /// Scrolling over the bar (or over the window with Settings › Scrolling's key held): one tab
+    /// back or forward, in the order the bar shows them. Stops at the ends unless set to wrap.
+    func scrollTabs(by step: Int, in group: WindowGroup) {
+        guard !group.isPaused, tearOff == nil,
+              let index = group.windows.firstIndex(where: { $0.windowID == group.activeID })
+        else { return }
+        let count = group.windows.count
+        var target = index + step
+        if Settings.shared.scrollEnds == .wrap {
+            target = (target % count + count) % count
+        } else {
+            target = min(max(target, 0), count - 1)
+        }
+        guard target != index else { return }
+        activate(group.windows[target].windowID, in: group)
+    }
+
     /// Ctrl+Option+←/→: previous or next tab of the group you're working in, wrapping around.
     func cycleTabs(by offset: Int) {
         guard let focused = WindowDriver.focusedWindow(),
@@ -263,6 +320,27 @@ final class GroupManager {
     }
 
     // MARK: - Tab bar
+
+    /// Stacks a group's tabs by app: each app's tabs pile up in one place in the bar, like cards
+    /// in a wallet, or spread out again.
+    func setStacked(_ stacked: Bool, _ group: WindowGroup) {
+        group.isStacked = stacked && Settings.shared.stackingEnabled
+        refreshBar(of: group)
+        log.notice("\(stacked ? "Stacked" : "Unstacked", privacy: .public) a group's tabs by app")
+    }
+
+    /// Stacked: one app's tabs sit together, where that app's first tab is, so they can pile up
+    /// and scrolling goes through a pile before moving on.
+    private func keepAppsTogether(in group: WindowGroup) {
+        var order: [pid_t] = []
+        for window in group.windows where !order.contains(window.pid) {
+            order.append(window.pid)
+        }
+        let together = order.flatMap { pid in group.windows.filter { $0.pid == pid } }
+        if together.map(\.windowID) != group.windows.map(\.windowID) {
+            group.windows = together
+        }
+    }
 
     /// Pins a group's tab bar on top of other windows, or puts it back just above its window.
     func setPinned(_ pinned: Bool, _ group: WindowGroup) {
@@ -282,6 +360,7 @@ final class GroupManager {
     }
 
     func refreshBar(of group: WindowGroup) {
+        if group.isStacked { keepAppsTogether(in: group) }
         var windows = group.windows
         // A window pulled out mid-drag keeps its (collapsed) tab until you let go: removing the
         // tab would end the drag gesture.
@@ -289,8 +368,10 @@ final class GroupManager {
             windows.insert(session.window, at: min(session.index, windows.count))
         }
         group.bar.model.tabs = windows.map { window in
-            TabBarModel.Tab(id: window.windowID, title: window.title, icon: window.appIcon, tint: AppTint.color(for: window.app))
+            TabBarModel.Tab(id: window.windowID, title: window.title, icon: window.appIcon, tint: AppTint.color(for: window.app), app: window.pid)
         }
+        group.bar.model.stacked = group.isStacked
+        group.bar.model.pileFronts = group.pileFronts
         group.bar.model.activeID = group.activeID
         positionBar(of: group)
     }
@@ -302,7 +383,7 @@ final class GroupManager {
         }
         guard let active = group.active, let frame = active.frame else { return }
         defer { updateCovered(of: group) }
-        if let placement = TabBarPanel.placement(for: frame) {
+        if let placement = TabBarPanel.placement(for: frame, extra: group.bar.model.extraHeight) {
             shrinkAttempts[active.windowID] = nil
             group.bar.attach(above: active.windowID, frame: frame, placement: placement)
             return
@@ -325,7 +406,7 @@ final class GroupManager {
     private func makeRoomForBar(above window: ExternalWindow, in group: WindowGroup) {
         pendingShrinks[window.windowID] = nil
         guard group.activeID == window.windowID, !group.isPaused,
-              let frame = window.frame, TabBarPanel.placement(for: frame) == nil
+              let frame = window.frame, TabBarPanel.placement(for: frame, extra: group.bar.model.extraHeight) == nil
         else { return }
         shrinkAttempts[window.windowID, default: 0] += 1
         var shorter = frame

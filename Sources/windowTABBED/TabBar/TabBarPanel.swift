@@ -9,6 +9,21 @@ final class TabBarModel: ObservableObject {
         var title: String
         let icon: NSImage?
         let tint: NSColor
+        /// The app it belongs to, for stacking tabs by app.
+        var app: pid_t = 0
+    }
+
+    /// One place in the bar: a single tab, or (stacked by app) a pile of one app's tabs with the
+    /// front one drawn as a normal tab and the others peeking out above it, like cards in a wallet.
+    struct Slot: Identifiable {
+        let id: String
+        let front: Tab
+        /// Behind the front one, nearest first.
+        let behind: [Tab]
+        var tabs: [Tab] { [front] + behind }
+
+        /// Takes no room: its only tab was pulled out mid-drag.
+        func isGone(_ collapsedID: CGWindowID?) -> Bool { front.id == collapsedID && behind.isEmpty }
     }
 
     @Published var tabs: [Tab] = []
@@ -28,11 +43,56 @@ final class TabBarModel: ObservableObject {
     /// lives on, but drawn with no width.
     @Published var collapsedID: CGWindowID?
 
+    /// Right-click › Stack Tabs by App: one app's tabs pile up in a single place.
+    @Published var stacked = false
+    /// Per app, the tab last brought to the front of its pile.
+    @Published var pileFronts: [pid_t: CGWindowID] = [:]
+
+    /// How much of each card behind the front one shows.
+    static var peek: CGFloat { (16 * TabBarPanel.scale).rounded() }
+    /// Cards drawn behind a front one at most; the rest are still a scroll away.
+    static let maxBehind = 3
+
+    /// The bar's places, left to right. A tab being dragged stays the front of its pile until you
+    /// let go: moving it to another place would end its drag gesture.
+    var slots: [Slot] {
+        guard stacked else {
+            return tabs.map { Slot(id: "tab-\($0.id)", front: $0, behind: []) }
+        }
+        var result: [Slot] = []
+        var run: [Tab] = []
+        func flush() {
+            guard let first = run.first else { return }
+            if run.count == 1 {
+                result.append(Slot(id: "tab-\(first.id)", front: first, behind: []))
+            } else {
+                let frontID = run.contains { $0.id == draggingID } ? draggingID
+                    : run.contains { $0.id == activeID } ? activeID
+                    : run.contains { $0.id == pileFronts[first.app] } ? pileFronts[first.app] : first.id
+                let front = run.first { $0.id == frontID } ?? first
+                result.append(Slot(id: "app-\(first.app)", front: front, behind: run.filter { $0.id != front.id }))
+            }
+            run = []
+        }
+        for tab in tabs {
+            if let last = run.last, last.app != tab.app { flush() }
+            run.append(tab)
+        }
+        flush()
+        return result
+    }
+
+    /// Room above the tabs (below, when flipped) for the cards peeking out of piles.
+    var extraHeight: CGFloat {
+        let deepest = slots.map { min($0.behind.count, Self.maxBehind) }.max() ?? 0
+        return Self.peek * CGFloat(deepest)
+    }
+
     /// Space between tabs for this theme and size.
     var spacing: CGFloat { (theme.spacing * scale).rounded() }
 
     /// Tabs that take up room in the bar.
-    var visibleCount: Int { tabs.filter { $0.id != collapsedID }.count }
+    var visibleCount: Int { slots.filter { !$0.isGone(collapsedID) }.count }
 
     /// How wide a tab is drawn.
     func width(isActive: Bool) -> CGFloat {
@@ -94,8 +154,13 @@ final class TabBarPanel: NSPanel {
     private var isHovered = false {
         didSet { if isHovered != oldValue { updateDimming() } }
     }
+    /// Asked to stack or unstack from the bar's right-click menu.
+    var onToggleStack: (() -> Void)?
     /// Asked to pin or unpin from the bar's right-click menu.
     var onTogglePin: (() -> Void)?
+    /// Scrolled over the bar: −1 for the previous tab, +1 for the next.
+    var onScroll: ((Int) -> Void)?
+    private let stepper = ScrollStepper()
 
     /// How faint a pinned, covered bar is with Settings › Pinned tab bars › Dimmed.
     static let dimmedAlpha: CGFloat = 0.4
@@ -115,6 +180,11 @@ final class TabBarPanel: NSPanel {
         let host = FirstMouseHostingView(rootView: TabStripView(model: model))
         host.onHover = { [weak self] inside in self?.isHovered = inside }
         host.contextMenu = { [weak self] in self?.makeContextMenu() }
+        host.onScroll = { [weak self] event in
+            guard let self else { return }
+            let step = self.stepper.steps(for: event)
+            if step != 0 { self.onScroll?(step) }
+        }
         contentView = host
         lookSubscription = Settings.shared.$pinnedLook.sink { [weak self] _ in
             DispatchQueue.main.async { self?.updateDimming() }
@@ -148,8 +218,9 @@ final class TabBarPanel: NSPanel {
     }
 
     /// Where the bar fits for a window at `frame`, or nil if it fits neither above nor below.
-    static func placement(for frame: CGRect) -> Placement? {
+    static func placement(for frame: CGRect, extra: CGFloat = 0) -> Placement? {
         let visible = ScreenGeometry.visibleFrame(containing: frame)
+        let height = height + extra
         if frame.minY - height >= visible.minY { return .above }
         if frame.maxY + height <= visible.maxY { return .below }
         return nil
@@ -160,7 +231,8 @@ final class TabBarPanel: NSPanel {
     /// drag: the stacking can't change then, and every saved call keeps the bar smooth.
     func attach(above windowID: CGWindowID, frame: CGRect, placement: Placement, reorder: Bool = true) {
         lastAttach = (windowID, frame, placement)
-        let height = Self.height
+        // Piles of stacked tabs need room for the cards peeking out of them.
+        let height = Self.height + model.extraHeight
         let flipped = placement == .below
         if model.flipped != flipped { model.flipped = flipped }
 
@@ -213,7 +285,16 @@ final class TabBarPanel: NSPanel {
         pin.target = self
         pin.state = isPinned ? .on : .off
         menu.addItem(pin)
+        guard Settings.shared.stackingEnabled else { return menu }
+        let stack = NSMenuItem(title: "Stack Tabs by App", action: #selector(toggleStack), keyEquivalent: "")
+        stack.target = self
+        stack.state = model.stacked ? .on : .off
+        menu.addItem(stack)
         return menu
+    }
+
+    @objc private func toggleStack() {
+        onToggleStack?()
     }
 
     @objc private func togglePin() {
@@ -224,9 +305,11 @@ final class TabBarPanel: NSPanel {
     func tabFrame(of id: CGWindowID) -> CGRect? {
         guard model.tabs.contains(where: { $0.id == id }) else { return nil }
         var x = axFrame.minX
-        for tab in model.tabs where tab.id != model.collapsedID {
-            if tab.id == id { break }
-            x += model.width(isActive: tab.id == model.activeID) + Self.tabSpacing
+        // A tab in a pile is placed where its pile is.
+        for slot in model.slots where !slot.isGone(model.collapsedID) {
+            if slot.tabs.contains(where: { $0.id == id }) { break }
+            let active = slot.front.id == model.activeID && slot.front.id != model.collapsedID
+            x += model.width(isActive: active) + Self.tabSpacing
         }
         let height = Self.height
         let y = model.flipped ? axFrame.minY : axFrame.maxY - height
@@ -240,6 +323,7 @@ final class TabBarPanel: NSPanel {
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     var onHover: ((Bool) -> Void)?
     var contextMenu: (() -> NSMenu?)?
+    var onScroll: ((NSEvent) -> Void)?
     private var hoverArea: NSTrackingArea?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -260,6 +344,10 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         if event.trackingArea === hoverArea { onHover?(false) }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if let onScroll { onScroll(event) } else { super.scrollWheel(with: event) }
     }
 
     override func rightMouseDown(with event: NSEvent) {

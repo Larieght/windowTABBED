@@ -9,9 +9,17 @@ struct TabStripView: View {
 
     var body: some View {
         HStack(alignment: model.flipped ? .top : .bottom, spacing: model.spacing) {
-            ForEach(model.tabs) { tab in
+            ForEach(model.slots) { slot in
+                let tab = slot.front
                 let isActive = tab.id == model.activeID
                 let collapsed = tab.id == model.collapsedID
+                ZStack(alignment: model.flipped ? .top : .bottom) {
+                    // Cards behind the front one, deepest first so nearer ones cover them. While
+                    // the front one is pulled out, the nearest takes its place.
+                    ForEach(Array(slot.behind.prefix(TabBarModel.maxBehind).enumerated()).reversed(), id: \.element.id) { depth, card in
+                        peekingCard(card, depth: collapsed ? depth - 1 : depth,
+                                    width: model.width(isActive: isActive && !collapsed), frontActive: isActive && !collapsed)
+                    }
                 TabChip(
                     tab: tab,
                     isActive: isActive,
@@ -26,9 +34,10 @@ struct TabStripView: View {
                     onDragChanged: { model.onDragChanged?(tab.id) },
                     onDragEnded: { model.onDragEnded?(tab.id) }
                 )
+                }
                 // A tab whose window was pulled out of the group keeps its (empty) place, so
                 // its drag gesture lives on, but takes no room.
-                .padding(.trailing, collapsed ? -model.spacing : 0)
+                .padding(.trailing, slot.isGone(model.collapsedID) ? -model.spacing : 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.flipped ? .topLeading : .bottomLeading)
@@ -38,6 +47,22 @@ struct TabStripView: View {
         .animation(Self.spring, value: model.collapsedID)
         .animation(Self.spring, value: model.theme)
         .animation(Self.spring, value: model.scale)
+        .animation(Self.spring, value: model.stacked)
+    }
+
+    /// A tab peeking out of a pile, its top strip (icon and title) showing above the cards in
+    /// front of it. Clicking it brings that window to the front.
+    private func peekingCard(_ card: TabBarModel.Tab, depth: Int, width: CGFloat, frontActive: Bool) -> some View {
+        let scale = model.scale
+        let front = (model.theme.height(active: frontActive) * scale).rounded()
+        let own = (model.theme.height(active: false) * scale).rounded()
+        // Its outer edge sits one peek further out than the card in front of it. Depth −1: in the
+        // front's place.
+        let shift = depth < 0 ? 0 : front - own + TabBarModel.peek * CGFloat(depth + 1)
+        return TabFace(tab: card, isActive: false, flipped: model.flipped, iconOnly: model.iconOnly, width: width,
+                       theme: model.theme, scale: scale, peeking: depth >= 0)
+            .offset(y: model.flipped ? shift : -shift)
+            .onTapGesture { model.onSelect?(card.id) }
     }
 }
 
@@ -82,6 +107,8 @@ struct TabFace: View {
     var theme: TabTheme = Settings.shared.tabTheme.resolved
     /// Settings › Tabs › Size: every measurement is multiplied by it.
     var scale: CGFloat = TabBarPanel.scale
+    /// Behind another tab in a pile: only its outer strip shows, so the icon and title sit there.
+    var peeking = false
     var onClose: (() -> Void)?
 
     /// Background tabs keep only a hint of their app's color (Aqua).
@@ -116,7 +143,9 @@ struct TabFace: View {
         }
         .padding(.leading, (theme == .pill ? 8 : 10) * scale)
         .padding(.trailing, (iconOnly && !isActive ? 10 : theme == .retro ? 3 : 8) * scale)
-        .frame(width: width, height: (theme.height(active: isActive) * scale).rounded())
+        .padding(flipped ? .bottom : .top, peeking ? max(0, (TabBarModel.peek - 16 * scale) / 2) : 0)
+        .frame(width: width, height: (theme.height(active: isActive) * scale).rounded(),
+               alignment: peeking ? (flipped ? .bottom : .top) : .center)
         .background(background)
         .clipShape(shape)
         .contentShape(shape)

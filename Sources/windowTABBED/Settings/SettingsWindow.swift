@@ -171,6 +171,52 @@ private struct SettingsView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Text("Stacking tabs by app")
+                .font(.headline)
+            HStack(spacing: 8) {
+                Toggle("Stack Tabs by App", isOn: $settings.stackingEnabled)
+                Text("EXPERIMENTAL")
+                    .font(.system(size: 8, weight: .heavy))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.orange))
+            }
+            Text("Adds Stack Tabs by App to a tab bar's right-click menu: each app's tabs pile up like cards in a wallet, each peeking out with its title.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            Text("Scrolling")
+                .font(.headline)
+            Text("Scroll over a tab bar to switch tabs: up for the previous one, down for the next.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            segmentedPicker($settings.scrollArea, label: "Scroll to switch tabs")
+            if settings.scrollArea == .anywhere {
+                HStack(spacing: 10) {
+                    Text("Key to hold")
+                    Picker("Key to hold", selection: $settings.scrollKey) {
+                        ForEach(GroupingKey.presets, id: \.self) { key in
+                            Text(key.label).tag(key)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                Text(scrollKeyNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 10) {
+                Text("At the first and last tab")
+                segmentedPicker($settings.scrollEnds, label: "At the first and last tab")
+            }
+
             Divider()
 
             Text("Keyboard")
@@ -260,6 +306,14 @@ private struct SettingsView: View {
             Text(settings.tabSize.label)
                 .foregroundStyle(.secondary)
                 .frame(width: 76, alignment: .trailing)
+        }
+    }
+
+    private var scrollKeyNote: String {
+        switch settings.scrollKey.flags {
+        case .shift: "With ⇧ held, many apps scroll sideways instead. Over a grouped window, WT takes the scroll."
+        case .control: "⌃ and scroll may zoom the whole screen if Accessibility Zoom is on."
+        default: "With the key held, scrolling over a grouped window switches its tabs instead of scrolling it."
         }
     }
 
@@ -355,6 +409,8 @@ protocol PickerOption: CaseIterable, Identifiable, Hashable {
 extension TabStyle: PickerOption {}
 extension TearOffStyle: PickerOption {}
 extension PinnedLook: PickerOption {}
+extension ScrollArea: PickerOption {}
+extension ScrollEnds: PickerOption {}
 
 /// The themes as a grid of small live previews: each card draws real tabs in that theme. The
 /// chosen card sits on a tinted glass plate that slides across when you pick another (macOS 26+;

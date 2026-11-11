@@ -30,6 +30,29 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 - Dragging empty space on the bar does **nothing**. Move the group with the active window's title bar.
 - When a group is down to **one window**, the group dissolves and the bar disappears.
 - Tab switching shortcuts (Ctrl+Option+←/→) exist but are **off by default**.
+- **Scroll to switch tabs**: scrolling over a tab bar goes to the previous tab (pushing up: a wheel
+  away from you, two fingers up a trackpad, whatever Natural scrolling is set to) or the next one
+  (down). One wheel notch is one tab; a trackpad needs about 24 pt per tab, and the coasting after a
+  flick is ignored.
+  - Settings › Scrolling: **Over the tab bar** (default) or **Anywhere, holding a key**: with that key
+    held (⌥ by default), scrolling anywhere over a group's window switches its tabs and the window
+    doesn't scroll. Over the bar it works with no key either way.
+  - At the first and last tab: **Stop** (default) or **Wrap around**.
+
+## Stacking tabs by app
+
+- **Experimental**, off by default: Settings › Stacking tabs by app › **Stack Tabs by App** turns it
+  on. Turning it off spreads every stacked group out again.
+- Right-click a tab bar › **Stack Tabs by App** (per group, a checkmark when on). Each app's tabs pile
+  up in one place, like cards in a wallet: the front one is a normal tab and the others peek out
+  above it (below, when the bar is flipped), each showing its icon and title. Up to 3 show behind the
+  front one; the rest are still a scroll away.
+- The front of a pile is the active tab if it's in that pile, else the one you last used there.
+- Click a peeking card, or scroll, to bring that window to the front. Scrolling goes through a pile
+  before moving to the next app.
+- While stacked, an app's tabs stay together (where its first tab was), and dragging doesn't reorder
+  tabs. Dragging the front tab out of the bar still takes it out of the group.
+- The bar grows by one peek per card in its deepest pile.
 
 ## Pinned tab bars
 
@@ -53,12 +76,12 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 
 ## Themes
 
-- Settings › Tabs › Theme: **Aqua** (default), **Liquid Glass** (macOS 26+; Aqua on older systems),
+- Settings › Tabs › Theme: **Liquid Glass** (default; macOS 26+, Aqua on older systems), **Aqua**,
   **Flat**, **Pill**, **Metallic**, **Retro 98**, picked from a grid of live previews. Changing it
   redraws every bar right away.
 - Flat, Pill and Metallic are **experimental**: hidden unless "Show experimental themes" is on (off
   by default), then shown together as the grid's second row, tagged. Turning it off while using one
-  switches to Aqua.
+  switches to Liquid Glass.
 - Settings › Tabs › Size: **Small** (default, the original size), **Medium**, **Large**,
   **Extra Large** on a slider. Everything in the bar scales with it: height, tab widths, text, icons.
 

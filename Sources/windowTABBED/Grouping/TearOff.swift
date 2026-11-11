@@ -93,6 +93,8 @@ extension GroupManager {
 
     /// The other tabs slide aside as the dragged one passes their middle, like browser tabs.
     private func reorderLive(_ session: TearOffSession, in group: WindowGroup) {
+        // Stacked tabs keep each app together, so they don't reorder by hand.
+        guard !group.isStacked else { return }
         let model = group.bar.model
         let step = model.width(isActive: false) + model.spacing
         let offset = session.chip.midX - group.bar.axFrame.minX
