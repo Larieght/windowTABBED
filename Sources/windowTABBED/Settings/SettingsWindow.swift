@@ -1,21 +1,25 @@
 import AppKit
 import SwiftUI
 
-/// The Settings window. On first launch it doubles as the welcome screen where you pick your grouping key.
+/// The Settings window: a page per toolbar tab (General, Appearance, Behavior, Experimental,
+/// About), so it stays short however many settings there are. On first launch it opens on
+/// General, which doubles as the welcome screen where you pick your grouping key.
 final class SettingsWindow {
     static let shared = SettingsWindow()
 
     private(set) var window: NSWindow?
     let recorder = KeyRecorder()
+    /// The page Settings opens on next time.
+    private var lastPage = SettingsPage.general
 
-    func show(welcome: Bool = false) {
+    func show(welcome: Bool = false, page: SettingsPage? = nil) {
         LoginItem.shared.refresh()
         let window = self.window ?? makeWindow()
         self.window = window
-        let view = SettingsView(welcome: welcome, recorder: recorder) { [weak window] in window?.close() }
-        let hosting = NSHostingView(rootView: view)
-        window.contentView = hosting
-        window.setContentSize(hosting.fittingSize)
+        let tabs = SettingsTabs(welcome: welcome, recorder: recorder, onDone: { [weak window] in window?.close() })
+        tabs.onSelect = { [weak self] page in self?.lastPage = page }
+        window.contentViewController = tabs
+        tabs.select(welcome ? .general : page ?? lastPage)
         window.center()
         // A menu bar app has to activate itself, or its window opens behind everything.
         NSApp.activate()
@@ -24,17 +28,114 @@ final class SettingsWindow {
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 380),
+            contentRect: NSRect(x: 0, y: 0, width: SettingsPage.width, height: 380),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false)
         window.title = "windowTABBED Settings"
+        window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             self?.recorder.cancel()
         }
         return window
     }
+}
+
+/// The Settings pages, one per toolbar tab.
+enum SettingsPage: String, CaseIterable {
+    case general, appearance, behavior, experimental, about
+
+    static let width: CGFloat = 420
+
+    var label: String {
+        switch self {
+        case .general: "General"
+        case .appearance: "Appearance"
+        case .behavior: "Behavior"
+        case .experimental: "Experimental"
+        case .about: "About"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .appearance: "paintbrush"
+        case .behavior: "hand.point.up.left"
+        case .experimental: "flask"
+        case .about: "info.circle"
+        }
+    }
+}
+
+/// The toolbar tabs. The window takes each page's height, keeping its top edge where it is, and
+/// follows a page that grows or shrinks while it's open.
+private final class SettingsTabs: NSTabViewController {
+    var onSelect: ((SettingsPage) -> Void)?
+
+    init(welcome: Bool, recorder: KeyRecorder, onDone: @escaping () -> Void) {
+        super.init(nibName: nil, bundle: nil)
+        tabStyle = .toolbar
+        transitionOptions = []
+        for page in SettingsPage.allCases {
+            let content: AnyView = switch page {
+            case .general: AnyView(GeneralPage(welcome: welcome, recorder: recorder, onDone: onDone))
+            case .appearance: AnyView(AppearancePage())
+            case .behavior: AnyView(BehaviorPage())
+            case .experimental: AnyView(ExperimentalPage())
+            case .about: AnyView(AboutPage())
+            }
+            let hosting = NSHostingController(rootView: content
+                .padding(20)
+                .frame(width: SettingsPage.width, alignment: .topLeading)
+                .fixedSize(horizontal: false, vertical: true))
+            hosting.sizingOptions = [.preferredContentSize]
+            let item = NSTabViewItem(viewController: hosting)
+            item.label = page.label
+            item.identifier = page.rawValue
+            item.image = NSImage(systemSymbolName: page.symbol, accessibilityDescription: page.label)
+            addTabViewItem(item)
+        }
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func select(_ page: SettingsPage) {
+        selectedTabViewItemIndex = SettingsPage.allCases.firstIndex(of: page) ?? 0
+        fitWindow(animate: false)
+    }
+
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
+        if let id = tabViewItem?.identifier as? String, let page = SettingsPage(rawValue: id) {
+            onSelect?(page)
+        }
+        fitWindow(animate: true)
+    }
+
+    override func preferredContentSizeDidChange(for viewController: NSViewController) {
+        super.preferredContentSizeDidChange(for: viewController)
+        if viewController === tabViewItems[safe: selectedTabViewItemIndex]?.viewController {
+            fitWindow(animate: true)
+        }
+    }
+
+    private func fitWindow(animate: Bool) {
+        guard let window = view.window ?? SettingsWindow.shared.window,
+              let page = tabViewItems[safe: selectedTabViewItemIndex]?.viewController
+        else { return }
+        let size = page.view.fittingSize
+        let content = window.contentRect(forFrameRect: window.frame)
+        let target = window.frameRect(forContentRect: NSRect(x: content.minX, y: content.maxY - size.height,
+                                                             width: SettingsPage.width, height: size.height))
+        guard target != window.frame else { return }
+        window.setFrame(target, display: true, animate: animate && window.isVisible)
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
 }
 
 /// Records a grouping key combination: hold the keys you want, then let go of them.
@@ -82,7 +183,10 @@ final class KeyRecorder: ObservableObject {
     }
 }
 
-private struct SettingsView: View {
+
+// MARK: - Pages
+
+private struct GeneralPage: View {
     @ObservedObject private var settings = Settings.shared
     @ObservedObject private var loginItem = LoginItem.shared
     let welcome: Bool
@@ -139,93 +243,13 @@ private struct SettingsView: View {
 
             Divider()
 
-            Text("Tabs")
-                .font(.headline)
-            segmentedPicker($settings.tabStyle, label: "Tab style")
-            sizeSlider
-
-            Text("Theme")
-                .font(.headline)
-            ThemeGrid(selection: $settings.tabTheme, showExperimental: settings.showExperimentalThemes)
-            Toggle("Show experimental themes", isOn: $settings.showExperimentalThemes)
-                .font(.callout)
-            if settings.tabTheme == .glass, settings.tabTheme.resolved != .glass {
-                Text("Liquid Glass needs macOS 26. Tabs use Aqua until then.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text("Dragging a tab out")
-                .font(.headline)
-            segmentedPicker($settings.tearOffStyle, label: "Dragging a tab out")
-            Text(tearOffNote)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("Pinned tab bars")
-                .font(.headline)
-            segmentedPicker($settings.pinnedLook, label: "Pinned tab bars")
-            Text("Right-click a tab bar to pin it on top of other windows. This is how it looks while they cover its group.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("Stacking tabs by app")
-                .font(.headline)
-            HStack(spacing: 8) {
-                Toggle("Stack Tabs by App", isOn: $settings.stackingEnabled)
-                Text("EXPERIMENTAL")
-                    .font(.system(size: 8, weight: .heavy))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(.orange))
-            }
-            Text("Adds Stack Tabs by App to a tab bar's right-click menu: each app's tabs pile up like cards in a wallet, each peeking out with its title.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Divider()
-
-            Text("Scrolling")
-                .font(.headline)
-            Text("Scroll over a tab bar to switch tabs: up for the previous one, down for the next.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            segmentedPicker($settings.scrollArea, label: "Scroll to switch tabs")
-            if settings.scrollArea == .anywhere {
-                HStack(spacing: 10) {
-                    Text("Key to hold")
-                    Picker("Key to hold", selection: $settings.scrollKey) {
-                        ForEach(GroupingKey.presets, id: \.self) { key in
-                            Text(key.label).tag(key)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                }
-                Text(scrollKeyNote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack(spacing: 10) {
-                Text("At the first and last tab")
-                segmentedPicker($settings.scrollEnds, label: "At the first and last tab")
-            }
-
-            Divider()
-
             Text("Keyboard")
                 .font(.headline)
             Toggle("Switch tabs with ⌃⌥← and ⌃⌥→", isOn: $settings.tabShortcutsEnabled)
 
             Divider()
 
-            Text("General")
+            Text("Startup")
                 .font(.headline)
             Toggle("Open windowTABBED at login", isOn: Binding(get: { loginItem.isOn }, set: loginItem.set))
             if loginItem.needsApproval {
@@ -238,74 +262,85 @@ private struct SettingsView: View {
                 }
             }
 
+            if welcome {
+                HStack {
+                    Spacer()
+                    Button("Done", action: onDone)
+                        .keyboardShortcut(.defaultAction)
+                        .glassButton(prominent: true)
+                        .disabled(settings.groupingKey == nil || recorder.isRecording)
+                }
+            }
+        }
+    }
+}
+
+private struct AppearancePage: View {
+    @ObservedObject private var settings = Settings.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Tabs")
+                .font(.headline)
+            segmentedPicker($settings.tabStyle, label: "Tab style")
+            SizeSlider()
+
             Divider()
 
-            about
-
-            HStack {
-                Spacer()
-                Button("Done", action: onDone)
-                    .keyboardShortcut(.defaultAction)
-                    .glassButton(prominent: true)
-                    .disabled(settings.groupingKey == nil || recorder.isRecording)
-            }
-        }
-        .padding(20)
-        .frame(width: 400)
-    }
-
-    /// Version, links to the project on GitHub, and who made it.
-    private var about: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(nsImage: NSApp.applicationIconImage ?? NSImage())
-                .resizable()
-                .frame(width: 56, height: 56)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("windowTABBED")
-                    .font(.headline)
-                Text("Version \(AppDelegate.versionDescription)")
+            Text("Theme")
+                .font(.headline)
+            ThemeGrid(selection: $settings.tabTheme, showExperimental: settings.showExperimentalThemes)
+            Toggle("Show experimental themes", isOn: $settings.showExperimentalThemes)
+                .font(.callout)
+            if settings.tabTheme == .glass, settings.tabTheme.resolved != .glass {
+                Text("Liquid Glass needs macOS 26. Tabs use Aqua until then.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                HStack(spacing: 8) {
-                    linkButton("GitHub", to: Links.repository)
-                    linkButton("Check for Updates", to: Links.releases)
-                    linkButton("Report a Bug", to: Links.newIssue)
+            }
+        }
+    }
+}
+
+private struct BehaviorPage: View {
+    @ObservedObject private var settings = Settings.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Dragging a tab out")
+                .font(.headline)
+            segmentedPicker($settings.tearOffStyle, label: "Dragging a tab out")
+            note(tearOffNote)
+
+            Divider()
+
+            Text("Pinned tab bars")
+                .font(.headline)
+            segmentedPicker($settings.pinnedLook, label: "Pinned tab bars")
+            note("Right-click a tab bar to pin it on top of other windows. This is how it looks while they cover its group.")
+
+            Divider()
+
+            Text("Scrolling")
+                .font(.headline)
+            note("Scroll over a tab bar to switch tabs: up for the previous one, down for the next.")
+            segmentedPicker($settings.scrollArea, label: "Scroll to switch tabs")
+            if settings.scrollArea == .anywhere {
+                HStack(spacing: 10) {
+                    Text("Key to hold")
+                    Picker("Key to hold", selection: $settings.scrollKey) {
+                        ForEach(GroupingKey.presets, id: \.self) { key in
+                            Text(key.label).tag(key)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
                 }
-                .padding(.top, 2)
-                Text("© 2026 Larieght · Free and open source under the MIT license")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
+                note(scrollKeyNote)
             }
-        }
-    }
-
-    private func linkButton(_ title: String, to url: URL) -> some View {
-        Button(title) { NSWorkspace.shared.open(url) }
-            .controlSize(.small)
-            .glassButton()
-    }
-
-    /// Four sizes on a slider with a stop for each; Small is the original size.
-    private var sizeSlider: some View {
-        let sizes = TabSize.allCases
-        let index = Binding<Double>(
-            get: { Double(sizes.firstIndex(of: settings.tabSize) ?? 0) },
-            set: { settings.tabSize = sizes[min(max(Int($0.rounded()), 0), sizes.count - 1)] })
-        return HStack(spacing: 10) {
-            Text("Size")
-            Slider(value: index, in: 0...Double(sizes.count - 1), step: 1) {
-                Text("Size")
-            } minimumValueLabel: {
-                Image(systemName: "textformat.size.smaller")
-            } maximumValueLabel: {
-                Image(systemName: "textformat.size.larger")
+            HStack(spacing: 10) {
+                Text("At the first and last tab")
+                segmentedPicker($settings.scrollEnds, label: "At the first and last tab")
             }
-            .labelsHidden()
-            Text(settings.tabSize.label)
-                .foregroundStyle(.secondary)
-                .frame(width: 76, alignment: .trailing)
         }
     }
 
@@ -324,20 +359,127 @@ private struct SettingsView: View {
         case .tab: "Just a floating tab. The window moves when you let go."
         }
     }
+}
 
-    /// On macOS 26+, a Liquid Glass segmented control. Earlier systems keep the standard one.
-    @ViewBuilder private func segmentedPicker<Option: PickerOption>(_ selection: Binding<Option>, label: String) -> some View {
-        if #available(macOS 26, *) {
-            GlassSegmentedPicker(selection: selection)
-        } else {
-            Picker(label, selection: selection) {
-                ForEach(Array(Option.allCases)) { option in
-                    Text(option.label).tag(option)
-                }
+/// Features still being worked on, each off until you turn it on.
+private struct ExperimentalPage: View {
+    @ObservedObject private var settings = Settings.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Experimental")
+                    .font(.headline)
+                ExperimentalBadge()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            note("Features that aren't finished yet. They may change, or go away, in a later version.")
+
+            Divider()
+
+            Toggle("Stack Tabs by App", isOn: $settings.stackingEnabled)
+            note("Adds Stack Tabs by App to a tab bar's right-click menu: each app's tabs pile up like cards in a wallet, each peeking out with its title.")
+
+            Divider()
+
+            Toggle("Show experimental themes", isOn: $settings.showExperimentalThemes)
+            note("Adds Flat, Pill and Metallic to Appearance › Theme.")
         }
+    }
+}
+
+private struct AboutPage: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(nsImage: NSApp.applicationIconImage ?? NSImage())
+                .resizable()
+                .frame(width: 96, height: 96)
+            Text("windowTABBED")
+                .font(.title2.bold())
+            Text("Version \(AppDelegate.versionDescription)")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            HStack(spacing: 8) {
+                linkButton("GitHub", to: Links.repository)
+                linkButton("Check for Updates", to: Links.releases)
+                linkButton("Report a Bug", to: Links.newIssue)
+            }
+            .padding(.top, 4)
+            Text("© 2026 Larieght · Free and open source under the MIT license")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func linkButton(_ title: String, to url: URL) -> some View {
+        Button(title) { NSWorkspace.shared.open(url) }
+            .controlSize(.small)
+            .glassButton()
+    }
+}
+
+// MARK: - Shared pieces
+
+/// A small grey explanation under a setting.
+private func note(_ text: String) -> some View {
+    Text(text)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+}
+
+/// The orange tag on experimental things.
+private struct ExperimentalBadge: View {
+    var body: some View {
+        Text("EXPERIMENTAL")
+            .font(.system(size: 8, weight: .heavy))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(.orange))
+    }
+}
+
+/// Four sizes on a slider with a stop for each; Small is the original size.
+private struct SizeSlider: View {
+    @ObservedObject private var settings = Settings.shared
+
+    var body: some View {
+        let sizes = TabSize.allCases
+        let index = Binding<Double>(
+            get: { Double(sizes.firstIndex(of: settings.tabSize) ?? 0) },
+            set: { settings.tabSize = sizes[min(max(Int($0.rounded()), 0), sizes.count - 1)] })
+        HStack(spacing: 10) {
+            Text("Size")
+            Slider(value: index, in: 0...Double(sizes.count - 1), step: 1) {
+                Text("Size")
+            } minimumValueLabel: {
+                Image(systemName: "textformat.size.smaller")
+            } maximumValueLabel: {
+                Image(systemName: "textformat.size.larger")
+            }
+            .labelsHidden()
+            Text(settings.tabSize.label)
+                .foregroundStyle(.secondary)
+                .frame(width: 76, alignment: .trailing)
+        }
+    }
+}
+
+/// On macOS 26+, a Liquid Glass segmented control. Earlier systems keep the standard one.
+@ViewBuilder private func segmentedPicker<Option: PickerOption>(_ selection: Binding<Option>, label: String) -> some View {
+    if #available(macOS 26, *) {
+        GlassSegmentedPicker(selection: selection)
+    } else {
+        Picker(label, selection: selection) {
+            ForEach(Array(Option.allCases)) { option in
+                Text(option.label).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 }
 

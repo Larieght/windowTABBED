@@ -31,11 +31,11 @@ final class TabBarModel: ObservableObject {
     /// True when the bar sits under the window because there is no room above it.
     @Published var flipped = false
     @Published var tabWidth: CGFloat = TabBarPanel.maxTabWidth
-    /// Settings › Tabs › Icon only: tabs show just the app icon (and × on the active one).
+    /// Settings › Appearance › Icon only: tabs show just the app icon (and × on the active one).
     @Published var iconOnly = false
-    /// Settings › Tabs › Theme, already resolved for this macOS.
+    /// Settings › Appearance › Theme, already resolved for this macOS.
     @Published var theme: TabTheme = Settings.shared.tabTheme.resolved
-    /// Settings › Tabs › Size.
+    /// Settings › Appearance › Size.
     @Published var scale: CGFloat = TabBarPanel.scale
     /// The tab being dragged: the drag overlay draws it, so the bar's copy is hidden.
     @Published var draggingID: CGWindowID?
@@ -114,7 +114,7 @@ final class TabBarModel: ObservableObject {
 /// The tab strip window. One per group, owned by windowTABBED, ordered directly above the
 /// group's active window so other apps' windows can still cover it normally.
 final class TabBarPanel: NSPanel {
-    /// Settings › Tabs › Size: every measurement below grows with it.
+    /// Settings › Appearance › Size: every measurement below grows with it.
     static var scale: CGFloat { Settings.shared.tabSize.scale }
     static var height: CGFloat { (30 * scale).rounded() }
     static var maxTabWidth: CGFloat { (184 * scale).rounded() }
@@ -162,7 +162,7 @@ final class TabBarPanel: NSPanel {
     var onScroll: ((Int) -> Void)?
     private let stepper = ScrollStepper()
 
-    /// How faint a pinned, covered bar is with Settings › Pinned tab bars › Dimmed.
+    /// How faint a pinned, covered bar is with Settings › Behavior › Pinned tab bars › Dimmed.
     static let dimmedAlpha: CGFloat = 0.4
 
     init() {

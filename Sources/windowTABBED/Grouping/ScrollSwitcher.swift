@@ -28,7 +28,7 @@ final class ScrollStepper {
     }
 }
 
-/// Settings › Scrolling › Anywhere, holding a key: scrolling over a group's window with that key
+/// Settings › Behavior › Scrolling › Anywhere, holding a key: scrolling over a group's window with that key
 /// held switches tabs instead of scrolling the window. A global monitor can't stop the window
 /// from scrolling too, so this is an event tap (allowed by the Accessibility permission).
 final class ScrollTap {

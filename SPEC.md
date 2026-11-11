@@ -22,7 +22,7 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 - Drag a tab **out** of the bar and drop it on the desktop → it leaves the group and lands where dropped.
   - Pulling a tab up or down stretches it with resistance (rubber band); about 24 pt out it comes loose
     and follows the pointer. Dropping it back over the bar puts it back.
-  - Settings › Dragging a tab out picks what follows the pointer once it's loose:
+  - Settings › Behavior › Dragging a tab out picks what follows the pointer once it's loose:
     **Window** (default: the real window leaves the group right away and follows, with the tab on top),
     **Outline** (a floating tab and a dashed outline where the window will land) or
     **Tab** (just the floating tab). With Outline and Tab, the window moves when you let go.
@@ -34,14 +34,14 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
   away from you, two fingers up a trackpad, whatever Natural scrolling is set to) or the next one
   (down). One wheel notch is one tab; a trackpad needs about 24 pt per tab, and the coasting after a
   flick is ignored.
-  - Settings › Scrolling: **Over the tab bar** (default) or **Anywhere, holding a key**: with that key
+  - Settings › Behavior › Scrolling: **Over the tab bar** (default) or **Anywhere, holding a key**: with that key
     held (⌥ by default), scrolling anywhere over a group's window switches its tabs and the window
     doesn't scroll. Over the bar it works with no key either way.
   - At the first and last tab: **Stop** (default) or **Wrap around**.
 
 ## Stacking tabs by app
 
-- **Experimental**, off by default: Settings › Stacking tabs by app › **Stack Tabs by App** turns it
+- **Experimental**, off by default: Settings › Experimental › **Stack Tabs by App** turns it
   on. Turning it off spreads every stacked group out again.
 - Right-click a tab bar › **Stack Tabs by App** (per group, a checkmark when on). Each app's tabs pile
   up in one place, like cards in a wallet: the front one is a normal tab and the others peek out
@@ -61,7 +61,7 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 - A pinned bar floats above every normal window, so the group's tabs stay reachable while other
   windows cover it. Clicking a tab brings that window to the front as usual.
 - Only the bar is pinned, never the windows: macOS lets only the app that owns a window keep it on top.
-- Settings › Pinned tab bars sets how a pinned bar looks while another window covers its group:
+- Settings › Behavior › Pinned tab bars sets how a pinned bar looks while another window covers its group:
   **Dimmed** (default: faded, full strength under the pointer) or **Normal**.
 - An unpinned bar sits just above its window, so other windows cover it normally.
 
@@ -76,17 +76,21 @@ Design: https://www.figma.com/design/Ny6Db7XxBcnAkFWUHjaYnA
 
 ## Themes
 
-- Settings › Tabs › Theme: **Liquid Glass** (default; macOS 26+, Aqua on older systems), **Aqua**,
+- Settings › Appearance › Theme: **Liquid Glass** (default; macOS 26+, Aqua on older systems), **Aqua**,
   **Flat**, **Pill**, **Metallic**, **Retro 98**, picked from a grid of live previews. Changing it
   redraws every bar right away.
 - Flat, Pill and Metallic are **experimental**: hidden unless "Show experimental themes" is on (off
   by default), then shown together as the grid's second row, tagged. Turning it off while using one
   switches to Liquid Glass.
-- Settings › Tabs › Size: **Small** (default, the original size), **Medium**, **Large**,
+- Settings › Appearance › Size: **Small** (default, the original size), **Medium**, **Large**,
   **Extra Large** on a slider. Everything in the bar scales with it: height, tab widths, text, icons.
 
 ## Settings › General and About
 
+- Settings has a toolbar tab per page: **General** (grouping key, ⌃⌥←/→, Open at login),
+  **Appearance** (tab style, size, theme), **Behavior** (dragging a tab out, pinned bars, scrolling),
+  **Experimental** (stacking, experimental themes) and **About**. The window takes each page's
+  height. On first launch it opens on General with a welcome and a Done button.
 - **Open windowTABBED at login**, off by default. macOS keeps this (Login Items), so Settings reads it
   back from there; if macOS wants your OK first, Settings links to Login Items.
 - **About**: version and build, links to the GitHub page, its Releases (to check for updates) and a

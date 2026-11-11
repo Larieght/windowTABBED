@@ -28,7 +28,7 @@ apps. Hold a key, drag one window onto another, and they share a tab bar. Click 
   Metallic.
 - **Four sizes**, from Small to Extra Large, and **icon-only tabs** if you prefer a compact bar.
 - **Scroll to switch tabs.** Scroll over a tab bar: up for the previous tab, down for the next. Or
-  hold a key and scroll anywhere over the window (Settings › Scrolling).
+  hold a key and scroll anywhere over the window (Settings › Behavior › Scrolling).
 - **Stack tabs by app** (experimental, turn it on in Settings). Right-click a bar to pile each
   app's windows up like cards in a wallet, each one peeking out with its title.
 - **Keyboard shortcuts** (⌃⌥← / ⌃⌥→) to switch tabs, off by default.
@@ -61,11 +61,11 @@ apps. Hold a key, drag one window onto another, and they share a tab bar. Click 
 | Group two windows | Hold the grouping key and drag a window by its title bar onto another window. A blue outline shows where it will land. |
 | Add to a group | Do the same onto any window that's already grouped. |
 | Switch tabs | Click a tab, scroll over the tab bar, or focus the window any other way (⌘-Tab, Dock, Mission Control). |
-| Pile up an app's tabs | Turn on Settings › Stacking tabs by app (experimental), then right-click the tab bar › **Stack Tabs by App**. Click a peeking card to bring it forward. |
+| Pile up an app's tabs | Turn on Settings › Experimental › Stack Tabs by App, then right-click the tab bar › **Stack Tabs by App**. Click a peeking card to bring it forward. |
 | Reorder tabs | Drag a tab along the bar. |
 | Take a window out | Click the tab's **×** (the window stays open), or drag the tab off the bar. |
 | Move the group | Drag the active window's title bar. |
-| Keep a group's tabs on top | Right-click its tab bar › **Pin Tab Bar on Top**. Settings › Pinned tab bars picks whether it dims while covered. |
+| Keep a group's tabs on top | Right-click its tab bar › **Pin Tab Bar on Top**. Settings › Behavior › Pinned tab bars picks whether it dims while covered. |
 | Ungroup everything | Menu bar icon › **Ungroup All**. |
 
 A group with only one window left dissolves on its own. Quitting windowTABBED puts every window

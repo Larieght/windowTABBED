@@ -105,7 +105,7 @@ struct TabFace: View {
     let iconOnly: Bool
     let width: CGFloat
     var theme: TabTheme = Settings.shared.tabTheme.resolved
-    /// Settings › Tabs › Size: every measurement is multiplied by it.
+    /// Settings › Appearance › Size: every measurement is multiplied by it.
     var scale: CGFloat = TabBarPanel.scale
     /// Behind another tab in a pile: only its outer strip shows, so the icon and title sit there.
     var peeking = false

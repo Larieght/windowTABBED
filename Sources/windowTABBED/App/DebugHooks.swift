@@ -66,7 +66,7 @@ final class DebugHooks {
             let titles = (NSApp.delegate as? AppDelegate)?.currentMenuTitles() ?? []
             log.notice("debug: menu \(titles.joined(separator: " | "), privacy: .public)")
         case ("settings", _, _):
-            SettingsWindow.shared.show()
+            SettingsWindow.shared.show(page: parts.count > 1 ? SettingsPage(rawValue: String(parts[1])) : nil)
         case ("style", _, _) where parts.count == 2:
             Settings.shared.tabStyle = TabStyle(rawValue: String(parts[1])) ?? .full
         case ("theme", _, _) where parts.count == 2:

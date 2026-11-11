@@ -1,6 +1,6 @@
 import AppKit
 
-/// How tabs are drawn. Settings › Tabs › Theme. Designs: the Figma file's Themes page.
+/// How tabs are drawn. Settings › Appearance › Theme. Designs: the Figma file's Themes page.
 enum TabTheme: String, CaseIterable, Identifiable {
     /// The theme you get until you pick one.
     static let standard = TabTheme.glass
@@ -31,7 +31,7 @@ enum TabTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Not up to standard yet: only offered with Settings › Show experimental themes on.
+    /// Not up to standard yet: only offered with Settings › Appearance (or Experimental) › Show experimental themes on.
     var isExperimental: Bool { self == .flat || self == .pill || self == .metallic }
 
     /// The order Settings shows them in: the finished themes first, the experimental ones after.
@@ -78,7 +78,7 @@ enum TabTheme: String, CaseIterable, Identifiable {
     }
 }
 
-/// How big tabs are drawn. Settings › Tabs › Size. Small is the original size.
+/// How big tabs are drawn. Settings › Appearance › Size. Small is the original size.
 enum TabSize: String, CaseIterable, Identifiable {
     case small, medium, large, extraLarge
 

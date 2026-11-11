@@ -48,8 +48,9 @@ with the code.
   click-through `DragOverlay` window draws the dragged tab, since the bar itself is only 30 pt tall.
 - `TabBar/`: the tab strip, one borderless non-activating `NSPanel` per group, ordered just above
   the group's active window. SwiftUI tabs, tinted by the app icon's color (`AppTint`).
-- `Settings/`: preferences (`Settings`), the Settings window with its key recorder, theme grid and
-  About section, Open at login (`LoginItem`, through `SMAppService`), and the ⌃⌥←/→ tab shortcuts
+- `Settings/`: preferences (`Settings`), the Settings window (an `NSTabViewController` with a
+  toolbar tab per `SettingsPage`, each a SwiftUI page; the window takes the page's height) with its
+  key recorder and theme grid, Open at login (`LoginItem`, through `SMAppService`), and the ⌃⌥←/→ tab shortcuts
   (Carbon hot keys).
 
 ## Things that look wrong but aren't
@@ -74,7 +75,7 @@ with the code.
   in `GroupManager` finishes a tear-off whose gesture died anyway). The bar is taller by
   `extraHeight` while stacked.
 - **Scrolling anywhere is a `CGEvent` tap** (`ScrollSwitcher.swift`), not a global monitor, which
-  couldn't stop the window from scrolling too. It runs only with Settings › Scrolling › Anywhere.
+  couldn't stop the window from scrolling too. It runs only with Settings › Behavior › Scrolling › Anywhere.
 - **Raising a window also sets `kAXFrontmost` on its app**: since macOS 14, a background app's
   `activate()` request can be ignored after a click on the non-activating bar.
 - **The grouping key is modifiers only** (⇧ ⌃ ⌥ ⌘ fn), so holding it never types into the app.
@@ -93,7 +94,7 @@ are timing and window-server behavior that only show up live.
   - Tabs: `select n`, `close n`, `move n m`, `dragout n`.
   - Drags: `keydrag x1 y1 x2 y2` (with the grouping key), `drag x1 y1 x2 y2` (plain, logs the
     bar's lag), `setpos n x y`.
-  - Settings: `settings`, `style full|icon`, `theme aqua|glass|flat|pill|platinum|retro`,
+  - Settings: `settings [general|appearance|behavior|experimental|about]`, `style full|icon`, `theme aqua|glass|flat|pill|platinum|retro`,
     `size small|medium|large|extraLarge`, `glyph` (menu bar glyph to `build/glyph.png`), `login on|off` (changes the real login item:
     put it back),
     `tearoff window|outline|tab`, `pinlook dimmed|normal`, `scrollarea bar|anywhere`,

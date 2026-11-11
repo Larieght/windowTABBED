@@ -50,7 +50,7 @@ final class GroupManager {
     let overlay = DragOverlay()
     let mover = WindowMover()
 
-    /// Settings › Scrolling › Anywhere, holding a key.
+    /// Settings › Behavior › Scrolling › Anywhere, holding a key.
     private lazy var scrollTap = ScrollTap(groups: self)
     private var scrollSubscription: AnyCancellable?
     private var stackingSubscription: AnyCancellable?
@@ -292,7 +292,7 @@ final class GroupManager {
         groups.forEach(dissolve)
     }
 
-    /// Scrolling over the bar (or over the window with Settings › Scrolling's key held): one tab
+    /// Scrolling over the bar (or over the window with Settings › Behavior › Scrolling's key held): one tab
     /// back or forward, in the order the bar shows them. Stops at the ends unless set to wrap.
     func scrollTabs(by step: Int, in group: WindowGroup) {
         guard !group.isPaused, tearOff == nil,
@@ -349,7 +349,7 @@ final class GroupManager {
         log.notice("\(pinned ? "Pinned" : "Unpinned", privacy: .public) a tab bar")
     }
 
-    /// A pinned bar notes whether other windows cover its group, so Settings › Pinned tab bars
+    /// A pinned bar notes whether other windows cover its group, so Settings › Behavior › Pinned tab bars
     /// can dim it.
     private func updateCovered(of group: WindowGroup) {
         guard group.bar.isPinned, !group.isPaused, let active = group.active else {
